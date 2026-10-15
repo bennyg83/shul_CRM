@@ -10,8 +10,7 @@
 
 The app migrated from the Mode B sandbox (single React app, localStorage mock) to a three-workspace
 monorepo with a real Express + SQLite API. Since the last status update the core CRUD surface is built
-end-to-end and verified: **Families, Members, Pledges, Donations, Notes, Important Dates**, an aggregate upcoming-dates page, and a **Calendar** view (month grid with date highlights), plus dashboard stats
-splitting, and MUI confirm dialogs.
+end-to-end and verified: **Families** (with duplicate detection), **Members**, **Pledges & Donations**, **Notes**, **Important Dates**, an aggregate upcoming-dates page, and a **Calendar** view (month grid with date highlights), plus dashboard stats
 
 ### Architecture
 
@@ -58,17 +57,12 @@ pilzno-crm/
 - Runs under Node's native TypeScript type-stripping — needs **Node ≥ 23.6** (developed on v24.19.0). No build step for api (`build`/`typecheck` = `tsc -b --noEmit`).
 
 ### Web
-
 - `service.ts` is a ~200-line fetch client (`/api/*`, JSON, `ApiError` with status + server message).
   Public function names are unchanged from the mock era, so pages are untouched.
 - Vite dev + preview proxy `/api` → `http://localhost:3000` (same-origin in dev/preview).
-- **Real pages:** Dashboard (live KPIs + upcoming-dates widget), Families, Members, **Pledges & Donations** (list + record per family, link to pledge), **Important Dates** (aggregate upcoming view, 30/60/90-day or 1-year window), Settings (reset).
+- **Real pages:** Dashboard (live KPIs + upcoming-dates widget), Families (with duplicate name/phone detection), Members, **Pledges & Donations** (list + record per family, link to pledge), **Important Dates** (aggregate upcoming view, 30/60-90-day or 1-year window), **Calendar** (month grid with date type indicators), Settings (reset).
 - **Detail modals** (per family / per member) with tabs: Overview, Pledges & Donations, **Dates**, **Notes** — full add / edit / delete per tab.
-- **Placeholder:** Calendar (`/calendar`) only. Important Dates (`/dates`) is now a real aggregate page; per-entity dates are also editable in the modals.
-- **Real pages:** Dashboard (live KPIs + upcoming-dates widget), Families, Members, **Pledges & Donations** (list + record per family, link to pledge), **Important Dates** (aggregate upcoming view, 30/60/90-day or 1-year window), **Calendar** (month grid with date type indicators), Settings (reset).
 - All pages are lazy-loaded (route-level code splitting).
-
-### Hebrew date converter
 
 Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6 Tishrei, 5787").
 
