@@ -5,7 +5,7 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { CURRENCIES, formatMoney } from '@pilzno/shared';
-import type { UpcomingDate } from '@pilzno/shared';
+import type { ImportantDate } from '@pilzno/shared';
 import { getDashboardStats, listUpcomingDates } from '@/features/core/service';
 import { qk } from '@/features/core/queryKeys';
 import { palette } from '@/app/theme';
@@ -15,10 +15,13 @@ const breakdown = (totals: Record<string, number>) => {
   return parts.length > 0 ? parts.join('   ·   ') : '—';
 };
 
-const TYPE_LABELS: Record<UpcomingDate['type'], string> = {
+const TYPE_LABELS: Record<ImportantDate['type'], string> = {
   birthday: 'Birthday',
-  yahrzeit: 'Yahrzeit',
-  brit_mitzvah: 'Bar / Bat Mitzvah',
+  yahrzeit: 'Yahrzeit (Memorial)',
+  bar_mitzvah: 'Bar Mitzvah',
+  bat_mitzvah: 'Bat Mitzvah',
+  anniversary: 'Anniversary',
+  "seuda_hoda'a": 'Seuda Hoda\'a (Thanksgiving Meal)',
 };
 
 /** Short local date for the dashboard list (e.g. "Oct 28"), no UTC drift. */

@@ -26,7 +26,7 @@ import { gregorianToHebrew, formatHebrew } from '@/features/core/hebrewDate';
 
 const formSchema = z.object({
   memberId: z.string().min(1, 'Member is required'),
-  type: z.enum(['birthday', 'yahrzeit', 'brit_mitzvah']),
+  type: z.enum(['birthday', 'yahrzeit', 'bar_mitzvah', 'bat_mitzvah', 'anniversary', "seuda_hoda'a"]),
   date: z.string().min(1, 'Date is required'),
   recurring: z.boolean().optional(),
   note: z.string().optional().or(z.literal('')),
@@ -47,10 +47,16 @@ interface Props {
   onClose: () => void;
   onSaved: () => void;
   initial?: ImportantDate;
-  /** Members offered in the select (usually the family's members). */
   members?: Member[];
-  /** When set, the member is fixed (e.g. adding a date to a specific member). */
   fixedMemberId?: string;
+}
+
+/** Calculate event date from birthdate + age (13 for male, 12 for female). */
+function calculateEventFromBirthdate(birthdate: string, gender?: 'male' | 'female'): string {
+  const [y, m, d] = birthdate.split('-').map(Number);
+  const birthYear = y;
+  const eventYear = birthYear + (gender === 'female' ? 12 : 13);
+  return `${eventYear}-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
 }
 
 export function ImportantDateFormDialog({ open, onClose, onSaved, initial, members, fixedMemberId }: Props) {
@@ -75,22 +81,37 @@ export function ImportantDateFormDialog({ open, onClose, onSaved, initial, membe
   } = useForm<FormValues>({ resolver: zodResolver(formSchema) });
 
   const dateValue = useWatch({ control, name: 'date' });
-  const hebrew = dateValue && /^\d{4}-\d{2}-\d{2}$/.test(dateValue) ? gregorianToHebrew(dateValue) : undefined;
+  const memberValue = useWatch({ control, name: 'memberId' });
 
   useEffect(() => {
-    if (!open) return;
-    if (initial) {
+    if (open && !initial) {
+      reset(emptyForm(fixedMemberId ?? memberOptions[0]?.id ?? ''));
+    } else if (initial) {
       reset({
         memberId: initial.memberId,
-        type: initial.type,
+        type: initial.type as FormValues['type'],
         date: initial.date,
         recurring: initial.recurring ?? false,
         note: initial.note ?? '',
       });
-    } else {
-      reset(emptyForm(fixedMemberId ?? memberOptions[0]?.id ?? ''));
     }
   }, [open, initial, fixedMemberId, memberOptions, reset]);
+
+  useEffect(() => {
+    // For new birthday entries, auto-calculate from birthdate + age
+    if (!initial && !open) return;
+    const member = memberOptions.find((m) => m.id === memberValue);
+    if (member?.birthDate && dateValue === '') {
+      const birthGender = member.gender === 'other' ? undefined : member.gender;
+      const calculatedDate = calculateEventFromBirthdate(member.birthDate, birthGender);
+      reset({ ...emptyForm(memberValue), date: calculatedDate });
+    }
+  }, [open, initial, memberValue]);
+
+  const hebrew =
+    dateValue && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)
+      ? gregorianToHebrew(dateValue)
+      : undefined;
 
   const mutation = useMutation({
     mutationFn: (input: ImportantDateInput) =>
@@ -105,7 +126,7 @@ export function ImportantDateFormDialog({ open, onClose, onSaved, initial, membe
     const heb = /^\d{4}-\d{2}-\d{2}$/.test(values.date) ? gregorianToHebrew(values.date) : undefined;
     const input: ImportantDateInput = {
       memberId: values.memberId,
-      type: values.type,
+      type: values.type as ImportantDate['type'],
       date: values.date,
       hebrewDay: heb?.day,
       hebrewMonth: heb?.month,
@@ -137,9 +158,12 @@ export function ImportantDateFormDialog({ open, onClose, onSaved, initial, membe
             <FormControl>
               <FormLabel>Type</FormLabel>
               <Select {...register('type')}>
-                <MenuItem value="birthday">Birthday</MenuItem>
-                <MenuItem value="yahrzeit">Yahrzeit</MenuItem>
-                <MenuItem value="brit_mitzvah">Bar / Bat Mitzvah</MenuItem>
+                <MenuItem value="birthday">Birthday (age 13 male / age 12 female)</MenuItem>
+                <MenuItem value="yahrzeit">Yahrzeit (Memorial)</MenuItem>
+                <MenuItem value="bar_mitzvah">Bar Mitzvah</MenuItem>
+                <MenuItem value="bat_mitzvah">Bat Mitzvah</MenuItem>
+                <MenuItem value="anniversary">Anniversary</MenuItem>
+                <MenuItem value="seuda_hoda'a">Seuda Hoda'a (Thanksgiving Meal)</MenuItem>
               </Select>
             </FormControl>
             <Stack spacing={1}>
@@ -158,7 +182,7 @@ export function ImportantDateFormDialog({ open, onClose, onSaved, initial, membe
             </Stack>
             <FormControlLabel
               control={<Checkbox {...register('recurring')} />}
-              label="Repeats annually (e.g. birthday, yahrzeit)"
+              label="Repeats annually (e.g. birthday, yahrzeit, anniversary)"
             />
             <TextField label="Note" multiline minRows={2} {...register('note')} />
             {mutation.isError && <Alert severity="error">{(mutation.error as Error).message}</Alert>}

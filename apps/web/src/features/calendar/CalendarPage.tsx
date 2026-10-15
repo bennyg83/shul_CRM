@@ -16,13 +16,19 @@ const MONTHS = [
 const TYPE_COLORS: Record<ImportantDate['type'], string> = {
   birthday: '#4caf50', // green
   yahrzeit: '#9c27b0', // purple
-  brit_mitzvah: '#2196f3', // blue
+  bar_mitzvah: '#2196f3', // blue
+  bat_mitzvah: '#2196f3', // blue
+  anniversary: '#ff9800', // orange
+  "seuda_hoda'a": '#4caf50', // green
 };
 
 const TYPE_LABELS: Record<ImportantDate['type'], string> = {
   birthday: 'Birthday',
-  yahrzeit: 'Yahrzeit',
-  brit_mitzvah: 'Bar / Bat Mitzvah',
+  yahrzeit: 'Yahrzeit (Memorial)',
+  bar_mitzvah: 'Bar Mitzvah',
+  bat_mitzvah: 'Bat Mitzvah',
+  anniversary: 'Anniversary',
+  "seuda_hoda'a": 'Seuda Hoda\'a (Thanksgiving Meal)',
 };
 
 /** Parse ISO date to { month (0-11), day } for calendar indexing. */

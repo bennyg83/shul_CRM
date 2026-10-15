@@ -39,15 +39,18 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 const DATE_LABELS: Record<ImportantDate['type'], string> = {
   birthday: 'Birthday',
-  yahrzeit: 'Yahrzeit',
-  brit_mitzvah: 'Bar / Bat Mitzvah',
-};
+  yahrzeit: 'Yahrzeit (Memorial)',
+  bar_mitzvah: 'Bar Mitzvah',
+  bat_mitzvah: 'Bat Mitzvah',
+  anniversary: 'Anniversary',
+  "seuda_hoda'a": 'Seuda Hoda\'a (Thanksgiving Meal)',
+} as const;
+
 interface Props {
   memberId: string;
   open: boolean;
   onClose: () => void;
 }
-
 
 export function MemberDetailModal({ memberId, open, onClose }: Props) {
   const queryClient = useQueryClient();

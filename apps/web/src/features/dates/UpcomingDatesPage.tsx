@@ -15,16 +15,19 @@ import {
   Typography,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import type { UpcomingDate } from '@pilzno/shared';
+import type { ImportantDate } from '@pilzno/shared';
 import { listUpcomingDates } from '@/features/core/service';
 import { formatHebrew } from '@/features/core/hebrewDate';
 import { qk } from '@/features/core/queryKeys';
 
-const DATE_LABELS: Record<UpcomingDate['type'], string> = {
+const DATE_LABELS: Record<ImportantDate['type'], string> = {
   birthday: 'Birthday',
-  yahrzeit: 'Yahrzeit',
-  brit_mitzvah: 'Bar / Bat Mitzvah',
-};
+  yahrzeit: 'Yahrzeit (Memorial)',
+  bar_mitzvah: 'Bar Mitzvah',
+  bat_mitzvah: 'Bat Mitzvah',
+  anniversary: 'Anniversary',
+  "seuda_hoda'a": 'Seuda Hoda\'a (Thanksgiving Meal)',
+} as const;
 
 const WINDOWS = [
   { days: 30, label: '30 days' },

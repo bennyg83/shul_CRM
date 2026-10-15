@@ -85,7 +85,7 @@ export const donationSchema = z.object({
 export const importantDateSchema = z.object({
   id: z.string(),
   memberId: z.string(),
-  type: z.enum(['birthday', 'yahrzeit', 'brit_mitzvah']),
+  type: z.enum(["birthday", "yahrzeit", "bar_mitzvah", "bat_mitzvah", "anniversary", 'seuda_hoda\'a']),
   /** Gregorian ISO date of the original event (death date for yahrzeit). */
   date: z.string(),
   hebrewDay: z.number().int().min(1).max(30).optional(),
@@ -94,6 +94,8 @@ export const importantDateSchema = z.object({
   recurring: z.boolean().optional(),
   note: z.string().optional(),
 });
+
+
 
 export const noteSchema = z.object({
   id: z.string(),

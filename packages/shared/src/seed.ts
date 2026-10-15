@@ -375,7 +375,7 @@ export const seedImportantDates: ImportantDate[] = [
   {
     id: 'idt-001',
     memberId: 'mem-003',
-    type: 'brit_mitzvah',
+    type: 'bar_mitzvah',
     recurring: false,
     date: '2023-01-18',
     hebrewDay: 25,
@@ -408,7 +408,7 @@ export const seedImportantDates: ImportantDate[] = [
   {
     id: 'idt-004',
     memberId: 'mem-008',
-    type: 'brit_mitzvah',
+    type: 'bar_mitzvah',
     recurring: false,
     date: '2025-03-07',
     hebrewDay: 7,
