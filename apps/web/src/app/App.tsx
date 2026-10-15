@@ -20,8 +20,8 @@ const PledgesDonationsPage = lazy(
 const SettingsPage = lazy(
   () => import('@/features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
-const PlaceholderPage = lazy(
-  () => import('@/features/placeholder/PlaceholderPage').then((m) => ({ default: m.PlaceholderPage })),
+const CalendarPage = lazy(
+  () => import('@/features/calendar/CalendarPage').then((m) => ({ default: m.CalendarPage })),
 );
 const UpcomingDatesPage = lazy(
   () => import('@/features/dates/UpcomingDatesPage').then((m) => ({ default: m.UpcomingDatesPage })),
@@ -45,10 +45,7 @@ export function App() {
           <Route path="/members" element={<MembersPage />} />
           <Route path="/pledges" element={<PledgesDonationsPage />} />
           <Route path="/dates" element={<UpcomingDatesPage />} />
-          <Route
-            path="/calendar"
-            element={<PlaceholderPage title="Calendar" description="Upcoming dates and events." />}
-          />
+          <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

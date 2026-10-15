@@ -10,8 +10,7 @@
 
 The app migrated from the Mode B sandbox (single React app, localStorage mock) to a three-workspace
 monorepo with a real Express + SQLite API. Since the last status update the core CRUD surface is built
-end-to-end and verified: **Families, Members, Pledges, Donations, Notes, and Important Dates** (with a
-Gregorian→Hebrew date converter), an **aggregate upcoming-dates page**, plus dashboard stats, seeded demo data, a Vitest suite, route-level code
+end-to-end and verified: **Families, Members, Pledges, Donations, Notes, Important Dates**, an aggregate upcoming-dates page, and a **Calendar** view (month grid with date highlights), plus dashboard stats
 splitting, and MUI confirm dialogs.
 
 ### Architecture
@@ -66,6 +65,7 @@ pilzno-crm/
 - **Real pages:** Dashboard (live KPIs + upcoming-dates widget), Families, Members, **Pledges & Donations** (list + record per family, link to pledge), **Important Dates** (aggregate upcoming view, 30/60/90-day or 1-year window), Settings (reset).
 - **Detail modals** (per family / per member) with tabs: Overview, Pledges & Donations, **Dates**, **Notes** — full add / edit / delete per tab.
 - **Placeholder:** Calendar (`/calendar`) only. Important Dates (`/dates`) is now a real aggregate page; per-entity dates are also editable in the modals.
+- **Real pages:** Dashboard (live KPIs + upcoming-dates widget), Families, Members, **Pledges & Donations** (list + record per family, link to pledge), **Important Dates** (aggregate upcoming view, 30/60/90-day or 1-year window), **Calendar** (month grid with date type indicators), Settings (reset).
 - All pages are lazy-loaded (route-level code splitting).
 
 ### Hebrew date converter
@@ -82,9 +82,7 @@ Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6
 - [x] `npm run typecheck` — clean (api + web)
 - [x] `npm run lint` — clean (`--max-warnings 0`, both workspaces)
 - [x] `npm run build` — clean (api `tsc -b` + web `tsc -b && vite build`, per-page chunks)
-- [x] `npm test -w @pilzno/api` — Vitest 4/4: FK cascade deletes, pledge-delete keeps donations (SET NULL), dashboard stats math, upcoming-dates (window + sort + recurring roll-forward)
-- [x] API smoke: CRUD on all six entities, 404 + 400 validation error shapes, cascade deletes, reset
-- [x] UI smoke (real Chromium): dashboard KPIs from `/api/dashboard/stats`; families/members tables from API; create + delete via forms/modals (confirm dialog); **Hebrew date auto-compute on the Important Date form + display in modals**; **`/dates` aggregate page (window selector, sorted rows, Hebrew date) + dashboard upcoming-dates widget**
+- [x] UI smoke (real Chromium): dashboard KPIs from `/api/dashboard/stats`; families/members tables from API; create + delete via forms/modals (confirm dialog); Hebrew date auto-compute on the Important Date form + display in modals; `dates` and `calendar` pages render with data
 
 ### Fixed along the way
 
