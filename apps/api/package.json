@@ -1,0 +1,28 @@
+{
+  "name": "@pilzno/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.ts",
+    "start": "node src/index.ts",
+    "build": "tsc -b --noEmit",
+    "typecheck": "tsc -b --noEmit",
+    "lint": "eslint . --ext ts --max-warnings 0",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@pilzno/shared": "0.0.1",
+    "express": "^4.21.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^24.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.8.2",
+    "vitest": "^5.0.3"
+  }
+}

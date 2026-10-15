@@ -1,0 +1,24 @@
+{
+  "name": "pilzno-crm",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Pilzno Synagogue CRM — monorepo (api + web + shared)",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c cyan,magenta \"npm run dev -w @pilzno/api\" \"npm run dev -w @pilzno/web\"",
+    "dev:api": "npm run dev -w @pilzno/api",
+    "dev:web": "npm run dev -w @pilzno/web",
+    "build": "npm run build -w @pilzno/api && npm run build -w @pilzno/web",
+    "typecheck": "npm run typecheck -w @pilzno/api && npm run typecheck -w @pilzno/web",
+    "lint": "npm run lint -w @pilzno/api && npm run lint -w @pilzno/web",
+    "preview": "npm run preview -w @pilzno/web",
+    "start": "npm run start -w @pilzno/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

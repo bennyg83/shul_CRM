@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+
+# local SQLite database (dev data lives in apps/api/data)
+apps/api/data/
+
+# incremental build caches
+*.tsbuildinfo
+
+# logs
+*.log
+npm-debug.log*
+
+# env files
+.env
+.env.*
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
