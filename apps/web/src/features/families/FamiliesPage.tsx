@@ -27,7 +27,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import SearchIcon from '@mui/icons-material/Search';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { Family, FamilyInput } from '@pilzno/shared';
 import {
@@ -94,6 +94,7 @@ export function FamiliesPage() {
   });
 
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -310,10 +311,16 @@ export function FamiliesPage() {
               />
               <FormControl>
                 <FormLabel>Status</FormLabel>
-                <Select {...register('status')}>
-                  <MenuItem value="active">Active</MenuItem>
-                  <MenuItem value="inactive">Inactive</MenuItem>
-                </Select>
+                <Controller
+                  name="status"
+                  control={control}
+                  render={({ field }) => (
+                    <Select {...field} value={field.value ?? ''}>
+                      <MenuItem value="active">Active</MenuItem>
+                      <MenuItem value="inactive">Inactive</MenuItem>
+                    </Select>
+                  )}
+                />
               </FormControl>
               <TextField label="Notes" multiline minRows={3} {...register('notes')} />
               {saveMutation.isError && (

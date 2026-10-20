@@ -12,9 +12,10 @@ import {
   Select,
   Stack,
   TextField,
+  Typography,
 } from '@mui/material';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { CURRENCIES, CURRENCY_LABEL, type Pledge, type PledgeInput } from '@pilzno/shared';
@@ -62,6 +63,7 @@ export function PledgeFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
   const defaultFamilyId = fixedFamilyId ?? families?.[0]?.id ?? '';
 
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -115,15 +117,26 @@ export function PledgeFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
         <DialogContent dividers>
           <Stack spacing={2.5} sx={{ mt: 0.5 }}>
             {!fixed && (
-              <FormControl>
+              <FormControl error={Boolean(errors.familyId)}>
                 <FormLabel>Family</FormLabel>
-                <Select {...register('familyId')}>
-                  {familyOptions.map((f) => (
-                    <MenuItem key={f.id} value={f.id}>
-                      {f.name}
-                    </MenuItem>
-                  ))}
-                </Select>
+                <Controller
+                  name="familyId"
+                  control={control}
+                  render={({ field }) => (
+                    <Select {...field} value={field.value ?? ''}>
+                      {familyOptions.map((f) => (
+                        <MenuItem key={f.id} value={f.id}>
+                          {f.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  )}
+                />
+                {errors.familyId && (
+                  <Typography variant="caption" color="error">
+                    {errors.familyId.message}
+                  </Typography>
+                )}
               </FormControl>
             )}
             <TextField
@@ -135,11 +148,17 @@ export function PledgeFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
             />
             <FormControl>
               <FormLabel>Type</FormLabel>
-              <Select {...register('type')}>
-                <MenuItem value="">—</MenuItem>
-                <MenuItem value="annual">Annual</MenuItem>
-                <MenuItem value="one_time">One-time</MenuItem>
-              </Select>
+              <Controller
+                name="type"
+                control={control}
+                render={({ field }) => (
+                  <Select {...field} value={field.value ?? ''}>
+                    <MenuItem value="">—</MenuItem>
+                    <MenuItem value="annual">Annual</MenuItem>
+                    <MenuItem value="one_time">One-time</MenuItem>
+                  </Select>
+                )}
+              />
             </FormControl>
             <Stack direction="row" spacing={2}>
               <TextField
@@ -171,13 +190,19 @@ export function PledgeFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
               />
               <FormControl sx={{ width: 150 }}>
                 <FormLabel>Currency</FormLabel>
-                <Select {...register('currency')}>
-                  {CURRENCIES.map((c) => (
-                    <MenuItem key={c} value={c}>
-                      {CURRENCY_LABEL[c]}
-                    </MenuItem>
-                  ))}
-                </Select>
+                <Controller
+                  name="currency"
+                  control={control}
+                  render={({ field }) => (
+                    <Select {...field} value={field.value ?? ''}>
+                      {CURRENCIES.map((c) => (
+                        <MenuItem key={c} value={c}>
+                          {CURRENCY_LABEL[c]}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  )}
+                />
               </FormControl>
             </Stack>
             {mutation.isError && <Alert severity="error">{(mutation.error as Error).message}</Alert>}

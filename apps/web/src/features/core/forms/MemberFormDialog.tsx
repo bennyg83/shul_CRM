@@ -12,9 +12,10 @@ import {
   Select,
   Stack,
   TextField,
+  Typography,
 } from '@mui/material';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import type { Member, MemberInput } from '@pilzno/shared';
@@ -84,6 +85,7 @@ export function MemberFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
   const defaultFamilyId = fixedFamilyId ?? families?.[0]?.id ?? '';
 
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -176,15 +178,26 @@ export function MemberFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
         <DialogContent dividers>
           <Stack spacing={2.5} sx={{ mt: 0.5 }}>
             {!fixed && (
-              <FormControl>
+              <FormControl error={Boolean(errors.familyId)}>
                 <FormLabel>Family</FormLabel>
-                <Select {...register('familyId')}>
-                  {familyOptions.map((f) => (
-                    <MenuItem key={f.id} value={f.id}>
-                      {f.name}
-                    </MenuItem>
-                  ))}
-                </Select>
+                <Controller
+                  name="familyId"
+                  control={control}
+                  render={({ field }) => (
+                    <Select {...field} value={field.value ?? ''}>
+                      {familyOptions.map((f) => (
+                        <MenuItem key={f.id} value={f.id}>
+                          {f.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  )}
+                />
+                {errors.familyId && (
+                  <Typography variant="caption" color="error">
+                    {errors.familyId.message}
+                  </Typography>
+                )}
               </FormControl>
             )}
             <Stack direction="row" spacing={2}>
@@ -230,22 +243,34 @@ export function MemberFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
             <Stack direction="row" spacing={2}>
               <FormControl sx={{ flexGrow: 1 }}>
                 <FormLabel>Gender</FormLabel>
-                <Select {...register('gender')}>
-                  <MenuItem value="male">Male</MenuItem>
-                  <MenuItem value="female">Female</MenuItem>
-                  <MenuItem value="other">Other</MenuItem>
-                </Select>
+                <Controller
+                  name="gender"
+                  control={control}
+                  render={({ field }) => (
+                    <Select {...field} value={field.value ?? ''}>
+                      <MenuItem value="male">Male</MenuItem>
+                      <MenuItem value="female">Female</MenuItem>
+                      <MenuItem value="other">Other</MenuItem>
+                    </Select>
+                  )}
+                />
               </FormControl>
               <FormControl sx={{ flexGrow: 1 }}>
                 <FormLabel>Role</FormLabel>
-                <Select {...register('role')}>
-                  <MenuItem value="">—</MenuItem>
-                  <MenuItem value="husband">Husband</MenuItem>
-                  <MenuItem value="wife">Wife</MenuItem>
-                  <MenuItem value="son">Son</MenuItem>
-                  <MenuItem value="daughter">Daughter</MenuItem>
-                  <MenuItem value="other">Other</MenuItem>
-                </Select>
+                <Controller
+                  name="role"
+                  control={control}
+                  render={({ field }) => (
+                    <Select {...field} value={field.value ?? ''}>
+                      <MenuItem value="">—</MenuItem>
+                      <MenuItem value="husband">Husband</MenuItem>
+                      <MenuItem value="wife">Wife</MenuItem>
+                      <MenuItem value="son">Son</MenuItem>
+                      <MenuItem value="daughter">Daughter</MenuItem>
+                      <MenuItem value="other">Other</MenuItem>
+                    </Select>
+                  )}
+                />
               </FormControl>
             </Stack>
             <Stack direction="row" spacing={2}>
@@ -276,10 +301,16 @@ export function MemberFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
             <TextField label="Occupation" {...register('occupation')} />
             <FormControl>
               <FormLabel>Status</FormLabel>
-              <Select {...register('status')}>
-                <MenuItem value="active">Active</MenuItem>
-                <MenuItem value="inactive">Inactive</MenuItem>
-              </Select>
+              <Controller
+                name="status"
+                control={control}
+                render={({ field }) => (
+                  <Select {...field} value={field.value ?? ''}>
+                    <MenuItem value="active">Active</MenuItem>
+                    <MenuItem value="inactive">Inactive</MenuItem>
+                  </Select>
+                )}
+              />
             </FormControl>
             {mutation.isError && <Alert severity="error">{(mutation.error as Error).message}</Alert>}
           </Stack>

@@ -12,9 +12,10 @@ import {
   Select,
   Stack,
   TextField,
+  Typography,
 } from '@mui/material';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { CURRENCIES, CURRENCY_LABEL, formatMoney, type Donation, type DonationInput, type Pledge } from '@pilzno/shared';
@@ -66,6 +67,7 @@ export function DonationFormDialog({ open, onClose, onSaved, initial, pledges, f
   });
 
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -127,15 +129,26 @@ export function DonationFormDialog({ open, onClose, onSaved, initial, pledges, f
         <DialogContent dividers>
           <Stack spacing={2.5} sx={{ mt: 0.5 }}>
             {!fixed && (
-              <FormControl>
+              <FormControl error={Boolean(errors.familyId)}>
                 <FormLabel>Family</FormLabel>
-                <Select {...register('familyId')}>
-                  {familyOptions.map((f) => (
-                    <MenuItem key={f.id} value={f.id}>
-                      {f.name}
-                    </MenuItem>
-                  ))}
-                </Select>
+                <Controller
+                  name="familyId"
+                  control={control}
+                  render={({ field }) => (
+                    <Select {...field} value={field.value ?? ''}>
+                      {familyOptions.map((f) => (
+                        <MenuItem key={f.id} value={f.id}>
+                          {f.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  )}
+                />
+                {errors.familyId && (
+                  <Typography variant="caption" color="error">
+                    {errors.familyId.message}
+                  </Typography>
+                )}
               </FormControl>
             )}
             <TextField
@@ -148,14 +161,20 @@ export function DonationFormDialog({ open, onClose, onSaved, initial, pledges, f
             {pledges && pledges.length > 0 && (
               <FormControl>
                 <FormLabel>Link to pledge (optional)</FormLabel>
-                <Select {...register('pledgeId')}>
-                  <MenuItem value="">— Not linked —</MenuItem>
-                  {pledges.map((p) => (
-                    <MenuItem key={p.id} value={p.id}>
-                      {`${p.fund} ${p.year} — ${formatMoney(p.amount, p.currency)}`}
-                    </MenuItem>
-                  ))}
-                </Select>
+                <Controller
+                  name="pledgeId"
+                  control={control}
+                  render={({ field }) => (
+                    <Select {...field} value={field.value ?? ''}>
+                      <MenuItem value="">— Not linked —</MenuItem>
+                      {pledges.map((p) => (
+                        <MenuItem key={p.id} value={p.id}>
+                          {`${p.fund} ${p.year} — ${formatMoney(p.amount, p.currency)}`}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  )}
+                />
               </FormControl>
             )}
             <Stack direction="row" spacing={2}>
@@ -182,22 +201,34 @@ export function DonationFormDialog({ open, onClose, onSaved, initial, pledges, f
             <Stack direction="row" spacing={2}>
               <FormControl sx={{ width: 150 }}>
                 <FormLabel>Currency</FormLabel>
-                <Select {...register('currency')}>
-                  {CURRENCIES.map((c) => (
-                    <MenuItem key={c} value={c}>
-                      {CURRENCY_LABEL[c]}
-                    </MenuItem>
-                  ))}
-                </Select>
+                <Controller
+                  name="currency"
+                  control={control}
+                  render={({ field }) => (
+                    <Select {...field} value={field.value ?? ''}>
+                      {CURRENCIES.map((c) => (
+                        <MenuItem key={c} value={c}>
+                          {CURRENCY_LABEL[c]}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  )}
+                />
               </FormControl>
               <FormControl sx={{ flexGrow: 1 }}>
                 <FormLabel>Method</FormLabel>
-                <Select {...register('method')}>
-                  <MenuItem value="cash">Cash</MenuItem>
-                  <MenuItem value="check">Check</MenuItem>
-                  <MenuItem value="credit">Credit</MenuItem>
-                  <MenuItem value="transfer">Transfer</MenuItem>
-                </Select>
+                <Controller
+                  name="method"
+                  control={control}
+                  render={({ field }) => (
+                    <Select {...field} value={field.value ?? ''}>
+                      <MenuItem value="cash">Cash</MenuItem>
+                      <MenuItem value="check">Check</MenuItem>
+                      <MenuItem value="credit">Credit</MenuItem>
+                      <MenuItem value="transfer">Transfer</MenuItem>
+                    </Select>
+                  )}
+                />
               </FormControl>
             </Stack>
             <TextField label="Note" multiline minRows={2} {...register('note')} />

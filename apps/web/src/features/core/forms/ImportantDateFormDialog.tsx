@@ -162,27 +162,44 @@ export function ImportantDateFormDialog({ open, onClose, onSaved, initial, membe
         <DialogContent dividers>
           <Stack spacing={2.5} sx={{ mt: 0.5 }}>
             {!fixed && (
-              <FormControl>
+              <FormControl error={Boolean(errors.memberId)}>
                 <FormLabel>Member</FormLabel>
-                <Select {...register('memberId')}>
-                  {memberOptions.map((m) => (
-                    <MenuItem key={m.id} value={m.id}>
-                      {m.firstName} {m.lastName}
-                    </MenuItem>
-                  ))}
-                </Select>
+                <Controller
+                  name="memberId"
+                  control={control}
+                  render={({ field }) => (
+                    <Select {...field} value={field.value ?? ''}>
+                      {memberOptions.map((m) => (
+                        <MenuItem key={m.id} value={m.id}>
+                          {m.firstName} {m.lastName}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  )}
+                />
+                {errors.memberId && (
+                  <Typography variant="caption" color="error">
+                    {errors.memberId.message}
+                  </Typography>
+                )}
               </FormControl>
             )}
             <FormControl>
               <FormLabel>Type</FormLabel>
-              <Select {...register('type')}>
-                <MenuItem value="birthday">Birthday (age 13 male / age 12 female)</MenuItem>
-                <MenuItem value="yahrzeit">Yahrzeit (Memorial)</MenuItem>
-                <MenuItem value="bar_mitzvah">Bar Mitzvah</MenuItem>
-                <MenuItem value="bat_mitzvah">Bat Mitzvah</MenuItem>
-                <MenuItem value="anniversary">Anniversary</MenuItem>
-                <MenuItem value="seuda_hoda'a">Seuda Hoda&apos;a (Thanksgiving Meal)</MenuItem>
-              </Select>
+              <Controller
+                name="type"
+                control={control}
+                render={({ field }) => (
+                  <Select {...field} value={field.value ?? ''}>
+                    <MenuItem value="birthday">Birthday (age 13 male / age 12 female)</MenuItem>
+                    <MenuItem value="yahrzeit">Yahrzeit (Memorial)</MenuItem>
+                    <MenuItem value="bar_mitzvah">Bar Mitzvah</MenuItem>
+                    <MenuItem value="bat_mitzvah">Bat Mitzvah</MenuItem>
+                    <MenuItem value="anniversary">Anniversary</MenuItem>
+                    <MenuItem value="seuda_hoda'a">Seuda Hoda&apos;a (Thanksgiving Meal)</MenuItem>
+                  </Select>
+                )}
+              />
             </FormControl>
             <Stack spacing={1}>
               <TextField

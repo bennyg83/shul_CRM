@@ -15,7 +15,7 @@ import {
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useMutation } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import type { Member, Note, NoteInput } from '@pilzno/shared';
@@ -68,6 +68,7 @@ export function NoteFormDialog({ open, onClose, onSaved, initial, fixedFamilyId,
   const memberOptions = useMemo<Member[]>(() => members ?? allMembers ?? [], [members, allMembers]);
 
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -125,37 +126,55 @@ export function NoteFormDialog({ open, onClose, onSaved, initial, fixedFamilyId,
             {showMemberSelect && memberOptions.length > 0 && (
               <FormControl>
                 <FormLabel>Link to member (optional)</FormLabel>
-                <Select {...register('memberId')}>
-                  <MenuItem value="">— None —</MenuItem>
-                  {memberOptions.map((m) => (
-                    <MenuItem key={m.id} value={m.id}>
-                      {m.firstName} {m.lastName}
-                    </MenuItem>
-                  ))}
-                </Select>
+                <Controller
+                  name="memberId"
+                  control={control}
+                  render={({ field }) => (
+                    <Select {...field} value={field.value ?? ''}>
+                      <MenuItem value="">— None —</MenuItem>
+                      {memberOptions.map((m) => (
+                        <MenuItem key={m.id} value={m.id}>
+                          {m.firstName} {m.lastName}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  )}
+                />
               </FormControl>
             )}
             <Stack direction="row" spacing={2}>
               <FormControl sx={{ flexGrow: 1 }}>
                 <FormLabel>Type</FormLabel>
-                <Select {...register('type')}>
-                  <MenuItem value="">—</MenuItem>
-                  <MenuItem value="general">General</MenuItem>
-                  <MenuItem value="pastoral">Pastoral</MenuItem>
-                  <MenuItem value="membership">Membership</MenuItem>
-                  <MenuItem value="lifecycle">Lifecycle</MenuItem>
-                  <MenuItem value="donation">Donation</MenuItem>
-                  <MenuItem value="other">Other</MenuItem>
-                </Select>
+                <Controller
+                  name="type"
+                  control={control}
+                  render={({ field }) => (
+                    <Select {...field} value={field.value ?? ''}>
+                      <MenuItem value="">—</MenuItem>
+                      <MenuItem value="general">General</MenuItem>
+                      <MenuItem value="pastoral">Pastoral</MenuItem>
+                      <MenuItem value="membership">Membership</MenuItem>
+                      <MenuItem value="lifecycle">Lifecycle</MenuItem>
+                      <MenuItem value="donation">Donation</MenuItem>
+                      <MenuItem value="other">Other</MenuItem>
+                    </Select>
+                  )}
+                />
               </FormControl>
               <FormControl sx={{ flexGrow: 1 }}>
                 <FormLabel>Priority</FormLabel>
-                <Select {...register('priority')}>
-                  <MenuItem value="">—</MenuItem>
-                  <MenuItem value="low">Low</MenuItem>
-                  <MenuItem value="medium">Medium</MenuItem>
-                  <MenuItem value="high">High</MenuItem>
-                </Select>
+                <Controller
+                  name="priority"
+                  control={control}
+                  render={({ field }) => (
+                    <Select {...field} value={field.value ?? ''}>
+                      <MenuItem value="">—</MenuItem>
+                      <MenuItem value="low">Low</MenuItem>
+                      <MenuItem value="medium">Medium</MenuItem>
+                      <MenuItem value="high">High</MenuItem>
+                    </Select>
+                  )}
+                />
               </FormControl>
             </Stack>
             <TextField

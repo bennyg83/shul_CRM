@@ -27,7 +27,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import SearchIcon from '@mui/icons-material/Search';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { Member, MemberInput } from '@pilzno/shared';
 import {
@@ -108,6 +108,7 @@ export function MembersPage() {
   });
 
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -323,15 +324,26 @@ export function MembersPage() {
           ) : (
             <form onSubmit={onSubmit} noValidate>
               <Stack spacing={2.5}>
-                <FormControl fullWidth required>
+                <FormControl fullWidth required error={Boolean(errors.familyId)}>
                   <FormLabel>Family</FormLabel>
-                  <Select {...register('familyId')}>
-                    {families?.map((f) => (
-                      <MenuItem key={f.id} value={f.id}>
-                        {f.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
+                  <Controller
+                    name="familyId"
+                    control={control}
+                    render={({ field }) => (
+                      <Select {...field} value={field.value ?? ''}>
+                        {families?.map((f) => (
+                          <MenuItem key={f.id} value={f.id}>
+                            {f.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    )}
+                  />
+                  {errors.familyId && (
+                    <Typography variant="caption" color="error">
+                      {errors.familyId.message}
+                    </Typography>
+                  )}
                 </FormControl>
                 <TextField
                   label="First name"
@@ -354,11 +366,17 @@ export function MembersPage() {
                 />
                 <FormControl>
                   <FormLabel>Gender</FormLabel>
-                  <Select {...register('gender')}>
-                    <MenuItem value="female">Female</MenuItem>
-                    <MenuItem value="male">Male</MenuItem>
-                    <MenuItem value="other">Other</MenuItem>
-                  </Select>
+                  <Controller
+                    name="gender"
+                    control={control}
+                    render={({ field }) => (
+                      <Select {...field} value={field.value ?? ''}>
+                        <MenuItem value="female">Female</MenuItem>
+                        <MenuItem value="male">Male</MenuItem>
+                        <MenuItem value="other">Other</MenuItem>
+                      </Select>
+                    )}
+                  />
                 </FormControl>
                 <TextField
                   label="Birth date"
@@ -379,10 +397,16 @@ export function MembersPage() {
                 <TextField label="WhatsApp" {...register('whatsapp')} />
                 <FormControl>
                   <FormLabel>Status</FormLabel>
-                  <Select {...register('status')}>
-                    <MenuItem value="active">Active</MenuItem>
-                    <MenuItem value="inactive">Inactive</MenuItem>
-                  </Select>
+                  <Controller
+                    name="status"
+                    control={control}
+                    render={({ field }) => (
+                      <Select {...field} value={field.value ?? ''}>
+                        <MenuItem value="active">Active</MenuItem>
+                        <MenuItem value="inactive">Inactive</MenuItem>
+                      </Select>
+                    )}
+                  />
                 </FormControl>
                 {saveMutation.isError && (
                   <Alert severity="error">{(saveMutation.error as Error).message}</Alert>

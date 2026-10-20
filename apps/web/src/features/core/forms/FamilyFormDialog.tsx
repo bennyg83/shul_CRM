@@ -15,7 +15,7 @@ import {
   TextField,
 } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import type { Family, FamilyInput } from '@pilzno/shared';
@@ -77,6 +77,7 @@ function findDuplicates(families: Family[], current?: Family): DuplicateFamily[]
 
 export function FamilyFormDialog({ open, onClose, onSaved, initial }: Props) {
   const {
+    control,
     register,
     handleSubmit,
     formState: { errors },
@@ -220,10 +221,16 @@ export function FamilyFormDialog({ open, onClose, onSaved, initial }: Props) {
                 />
                 <FormControl>
                   <FormLabel>Status</FormLabel>
-                  <Select {...register('status')}>
-                    <MenuItem value="active">Active</MenuItem>
-                    <MenuItem value="inactive">Inactive</MenuItem>
-                  </Select>
+                  <Controller
+                    name="status"
+                    control={control}
+                    render={({ field }) => (
+                      <Select {...field} value={field.value ?? ''}>
+                        <MenuItem value="active">Active</MenuItem>
+                        <MenuItem value="inactive">Inactive</MenuItem>
+                      </Select>
+                    )}
+                  />
                 </FormControl>
                 <TextField label="Notes" multiline minRows={3} {...register('notes')} />
               </Stack>
