@@ -105,7 +105,7 @@ and 1 test fails.
 - [x] `license` fields + `npm run license:check` (552 packages, all permissive). `lightningcss` (MPL) removed by pinning vitest 3.
 - [x] API binds to `127.0.0.1` by default (`HOST` env to override) until login exists.
 - [x] typecheck + lint + test (21) + build green; old plans moved to `docs/archive/`.
-- [ ] Push to `origin` (waiting for your OK).
+- [x] Pushed to `origin` 2026-10-20 (master at 7f4481b).
 
 - [x] **Found during Phase 0, fixed 2026-10-20:** every MUI `<Select>` wired with `{...register()}` never showed its selected value. All 21 (the six forms plus the Families and Members page drawers) now use `Controller`. Also restored the Edit family dialog, which opened blank since 25be7f4.
 
