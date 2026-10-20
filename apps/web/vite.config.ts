@@ -13,13 +13,16 @@ export default defineConfig({
     },
   },
   build: {
+    // The framework chunk (React + MUI + React Router + React Query) is ~560 kB, ~170 kB gzipped;
+    // splitting it further gives circular-chunk warnings (see below), so allow it.
+    chunkSizeWarningLimit: 650,
     rollupOptions: {
       output: {
         // Split vendor libs out of the entry chunk so per-route chunks stay
         // small. The React + MUI + Emotion + data-fetching stack is tightly
         // coupled (MUI→React/Emotion, pickers→dayjs, react-query→React), so
         // keep that whole stack in ONE chunk — splitting it produces circular
-        // chunk warnings. Only the leaf libs (zod, Hebcal) go to a 2nd chunk.
+        // chunk warnings. Only the leaf libs (zod and other small utilities) go to a 2nd chunk.
         manualChunks(id: string) {
           if (!id.includes('node_modules')) return undefined;
           if (
