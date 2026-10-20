@@ -80,8 +80,30 @@ export function FamilyFormDialog({ open, onClose, onSaved, initial }: Props) {
     control,
     register,
     handleSubmit,
+    reset,
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(formSchema), defaultValues: emptyForm });
+
+  useEffect(() => {
+    if (!open) return;
+    reset(
+      initial
+        ? {
+            name: initial.name,
+            hebrewName: initial.hebrewName ?? '',
+            address: initial.address ?? '',
+            city: initial.city ?? '',
+            zip: initial.zip ?? '',
+            country: initial.country ?? '',
+            phone: initial.phone ?? '',
+            whatsapp: initial.whatsapp ?? '',
+            email: initial.email ?? '',
+            status: initial.status,
+            notes: initial.notes ?? '',
+          }
+        : emptyForm,
+    );
+  }, [open, initial, reset]);
 
   const [existingFamilies, setExistingFamilies] = useState<Family[]>([]);
   const [showConfirmDuplicate, setShowConfirmDuplicate] = useState(false);
