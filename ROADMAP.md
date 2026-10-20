@@ -107,13 +107,15 @@ and 1 test fails.
 - [x] typecheck + lint + test (21) + build green; old plans moved to `docs/archive/`.
 - [ ] Push to `origin` (waiting for your OK).
 
-**Found during Phase 0, not yet fixed:** every MUI `<Select>` in the six forms is wired with `{...register()}`, so it never shows its selected value (17 dropdowns). They need `Controller`.
+- [x] **Found during Phase 0, fixed 2026-10-20:** every MUI `<Select>` wired with `{...register()}` never showed its selected value. All 21 (the six forms plus the Families and Members page drawers) now use `Controller`. Also restored the Edit family dialog, which opened blank since 25be7f4.
 
 ## Phase 1 — Domain correctness (shul-critical)
 
 - [ ] **Hebrew-date recurrence** for recurring dates, with a per-date "recur by Hebrew / Gregorian" option (Hebrew is the default for yahrzeits).
 - [ ] Yahrzeit rules (the after-nightfall flag is done in Phase 0): Adar in leap and non-leap years, and 30 Cheshvan/Kislev. Each rule gets unit tests.
 - [ ] Centralize date-type labels and colors (currently copied in 5 files).
+- [ ] Seed important dates with an after-nightfall answer (seeded dates can't be saved from Edit until one is chosen).
+- [ ] Let Edit Note change the linked member (the member dropdown only appears on New).
 
 ## Phase 2 — Configurability layer (what makes "another shul" possible)
 

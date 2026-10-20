@@ -103,8 +103,7 @@ Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6
 
 ## Not yet done
 
-See `ROADMAP.md`. Next: fix MUI selects that never show their value (all six forms), then Phase 1
-(Hebrew-date recurrence for yahrzeits).
+See `ROADMAP.md`. Next: Phase 1 (Hebrew-date recurrence for yahrzeits).
 
 ## Commands
 
