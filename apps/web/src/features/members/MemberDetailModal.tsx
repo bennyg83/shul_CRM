@@ -36,15 +36,8 @@ import { invalidateRelated, qk } from '@/features/core/queryKeys';
 import { ImportantDateFormDialog, MemberFormDialog, NoteFormDialog } from '@/features/core/forms';
 import { Field } from '@/features/core/Field';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { DATE_TYPE_LABEL, effectiveRecurBy } from '@pilzno/shared';
 
-const DATE_LABELS: Record<ImportantDate['type'], string> = {
-  birthday: 'Birthday',
-  yahrzeit: 'Yahrzeit (Memorial)',
-  bar_mitzvah: 'Bar Mitzvah',
-  bat_mitzvah: 'Bat Mitzvah',
-  anniversary: 'Anniversary',
-  "seuda_hoda'a": 'Seuda Hoda\'a (Thanksgiving Meal)',
-} as const;
 
 interface Props {
   memberId: string;
@@ -185,10 +178,10 @@ export function MemberDetailModal({ memberId, open, onClose }: Props) {
                       <TableBody>
                         {dates.map((d) => (
                           <TableRow key={d.id} hover>
-                            <TableCell>{DATE_LABELS[d.type]}</TableCell>
+                            <TableCell>{DATE_TYPE_LABEL[d.type]}</TableCell>
                             <TableCell>{d.date}</TableCell>
                             <TableCell>{d.hebrewDay && d.hebrewMonth && d.hebrewYear ? formatHebrew(d.hebrewDay, d.hebrewMonth, d.hebrewYear) : '—'}</TableCell>
-                            <TableCell>{d.recurring ? 'Yes' : '—'}</TableCell>
+                            <TableCell>{d.recurring ? (effectiveRecurBy(d) === 'hebrew' ? 'Hebrew date' : 'English date') : '—'}</TableCell>
                             <TableCell align="right">
                               <IconButton
                                 size="small"

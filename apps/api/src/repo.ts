@@ -92,7 +92,17 @@ import type {
   PledgeInput,
   UpcomingDate,
 } from '@pilzno/shared';
-import { CURRENCIES, newId } from '@pilzno/shared';
+import {
+  CURRENCIES,
+  addDaysISO,
+  daysBetweenISO,
+  effectiveRecurBy,
+  gregorianToHebrew,
+  newId,
+  occurrencesBetween,
+  todayISO,
+  type RecurrenceOptions,
+} from '@pilzno/shared';
 
 // ---------------------------------------------------------------------------
 // Entity repos (cascades handled by the DDL foreign keys in db.ts)
@@ -148,65 +158,48 @@ export const notes = {
 };
 
 // ---------------------------------------------------------------------------
-// Upcoming important dates (aggregate across families; next-occurrence aware)
+// Upcoming important dates and calendar occurrences (shared recurrence rules:
+// Hebrew dates repeat on their Hebrew anniversary, with the yahrzeit rules)
 // ---------------------------------------------------------------------------
 
-/** Next occurrence of an ISO date on/after `today`. Recurring dates roll to the
- * next anniversary; one-time dates only count if they are today or in the future.
- * Returns a local-midnight Date, or null for a one-time date that already passed. */
-function nextOccurrence(iso: string, recurring: boolean | undefined, today: Date): Date | null {
-  const [y, m, d] = iso.split('-').map(Number);
-  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  if (recurring) {
-    let next = new Date(today.getFullYear(), m - 1, d);
-    if (next < todayStart) next = new Date(today.getFullYear() + 1, m - 1, d);
-    return next;
-  }
-  const event = new Date(y, m - 1, d);
-  return event >= todayStart ? event : null;
-}
-
-const DAY_MS = 86_400_000;
-
-const toISODate = (dt: Date) =>
-  `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-
-/** Upcoming important dates within `days` days, with member/family resolved and
- * the next occurrence computed. `today` is injectable for tests. */
-export function upcomingImportantDates(days = 90, today = new Date()): UpcomingDate[] {
-  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const windowEnd = new Date(todayStart.getTime() + days * DAY_MS);
-  const members = list<Member>('members', 'lastName COLLATE NOCASE, firstName COLLATE NOCASE');
-  const families = list<Family>('families', 'name COLLATE NOCASE');
-  const memberById: Record<string, Member> = {};
-  for (const m of members) memberById[m.id] = m;
-  const familyById: Record<string, Family> = {};
-  for (const f of families) familyById[f.id] = f;
+/** Every occurrence of every important date in [from, to] (inclusive ISO dates), with
+ * member/family resolved. `today` (ISO) sets daysUntil; it is injectable for tests. */
+export function dateOccurrences(from: string, to: string, today = todayISO(), options?: RecurrenceOptions): UpcomingDate[] {
+  const memberById = new Map(list<Member>('members', 'lastName COLLATE NOCASE').map((m) => [m.id, m]));
+  const familyById = new Map(list<Family>('families', 'name COLLATE NOCASE').map((f) => [f.id, f]));
 
   const out: UpcomingDate[] = [];
   for (const dt of list<ImportantDate>('importantDates', 'date ASC')) {
-    const member = memberById[dt.memberId];
-    const next = nextOccurrence(dt.date, dt.recurring, today);
-    if (!member || next === null || next > windowEnd) continue;
-    const family = familyById[member.familyId];
-    out.push({
-      id: dt.id,
-      memberId: dt.memberId,
-      memberName: `${member.firstName} ${member.lastName}`,
-      familyName: family ? family.name : '',
-      type: dt.type,
-      date: dt.date,
-      nextOccurrence: toISODate(next),
-      daysUntil: Math.round((next.getTime() - todayStart.getTime()) / DAY_MS),
-      hebrewDay: dt.hebrewDay,
-      hebrewMonth: dt.hebrewMonth,
-      hebrewYear: dt.hebrewYear,
-    });
+    const member = memberById.get(dt.memberId);
+    if (!member) continue;
+    for (const occurrence of occurrencesBetween(dt, from, to, options)) {
+      out.push({
+        id: dt.id,
+        memberId: dt.memberId,
+        memberName: `${member.firstName} ${member.lastName}`,
+        familyId: member.familyId,
+        familyName: familyById.get(member.familyId)?.name ?? '',
+        type: dt.type,
+        date: dt.date,
+        nextOccurrence: occurrence,
+        daysUntil: daysBetweenISO(today, occurrence),
+        hebrewDay: dt.hebrewDay,
+        hebrewMonth: dt.hebrewMonth,
+        hebrewYear: dt.hebrewYear,
+        recurBy: dt.recurring ? effectiveRecurBy(dt) : 'once',
+        occurrenceHebrew: gregorianToHebrew(occurrence),
+      });
+    }
   }
   out.sort(
     (a, b) => a.nextOccurrence.localeCompare(b.nextOccurrence) || a.memberName.localeCompare(b.memberName),
   );
   return out;
+}
+
+/** Upcoming important dates within `days` days of `today` (ISO), soonest first. */
+export function upcomingImportantDates(days = 90, today = todayISO(), options?: RecurrenceOptions): UpcomingDate[] {
+  return dateOccurrences(today, addDaysISO(today, days), today, options);
 }
 
 // ---------------------------------------------------------------------------

@@ -5,24 +5,16 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { CURRENCIES, formatMoney } from '@pilzno/shared';
-import type { ImportantDate } from '@pilzno/shared';
 import { getDashboardStats, listUpcomingDates } from '@/features/core/service';
 import { qk } from '@/features/core/queryKeys';
 import { palette } from '@/app/theme';
+import { DATE_TYPE_LABEL } from '@pilzno/shared';
 
 const breakdown = (totals: Record<string, number>) => {
   const parts = CURRENCIES.map((c) => (totals[c] > 0 ? formatMoney(totals[c], c) : null)).filter((s): s is string => s !== null);
   return parts.length > 0 ? parts.join('   ·   ') : '—';
 };
 
-const TYPE_LABELS: Record<ImportantDate['type'], string> = {
-  birthday: 'Birthday',
-  yahrzeit: 'Yahrzeit (Memorial)',
-  bar_mitzvah: 'Bar Mitzvah',
-  bat_mitzvah: 'Bat Mitzvah',
-  anniversary: 'Anniversary',
-  "seuda_hoda'a": 'Seuda Hoda\'a (Thanksgiving Meal)',
-};
 
 /** Short local date for the dashboard list (e.g. "Oct 28"), no UTC drift. */
 const shortDate = (iso: string) => {
@@ -113,7 +105,7 @@ export function DashboardPage() {
                     {d.familyName}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ ml: 'auto' }}>
-                    {TYPE_LABELS[d.type]}
+                    {DATE_TYPE_LABEL[d.type]}
                   </Typography>
                 </Stack>
               ))}

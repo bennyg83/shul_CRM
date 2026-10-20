@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS importantDates (
   hebrewMonth INTEGER,
   hebrewYear INTEGER,
   recurring INTEGER,
+  recurBy TEXT,
   note TEXT
 );
 
@@ -158,6 +159,7 @@ ensureColumn('donations', 'currency', "TEXT NOT NULL DEFAULT 'USD'");
 // Remove the legacy free-text hebrewDate column (superseded by hebrewDay/Month/Year).
 dropColumnIfPresent('importantDates', 'hebrewDate');
 ensureColumn('importantDates', 'afterNightfall', 'INTEGER');
+ensureColumn('importantDates', 'recurBy', 'TEXT');
 
 // ---------------------------------------------------------------------------
 // Table rebuilds. SQLite cannot ALTER a CHECK constraint, so a table whose
@@ -200,10 +202,11 @@ if (datesSql?.sql.includes('CHECK')) {
         hebrewMonth INTEGER,
         hebrewYear INTEGER,
         recurring INTEGER,
+        recurBy TEXT,
         note TEXT
       );
-      INSERT INTO importantDates_new (id, memberId, type, date, afterNightfall, hebrewDay, hebrewMonth, hebrewYear, recurring, note)
-        SELECT id, memberId, type, date, afterNightfall, hebrewDay, hebrewMonth, hebrewYear, recurring, note FROM importantDates;
+      INSERT INTO importantDates_new (id, memberId, type, date, afterNightfall, hebrewDay, hebrewMonth, hebrewYear, recurring, recurBy, note)
+        SELECT id, memberId, type, date, afterNightfall, hebrewDay, hebrewMonth, hebrewYear, recurring, recurBy, note FROM importantDates;
       DROP TABLE importantDates;
       ALTER TABLE importantDates_new RENAME TO importantDates;
       CREATE INDEX IF NOT EXISTS idx_dates_member ON importantDates(memberId);

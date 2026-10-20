@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { UUID_PATTERN } from './ids.ts';
+import { IMPORTANT_DATE_TYPES, RECUR_BY, type RecurBy } from './dateTypes.ts';
+import type { HebrewDate } from './hebrewCalendar.ts';
 
 /** Record IDs and foreign keys are UUIDs (generated with newId() from ids.ts). */
 const uuid = () => z.string().regex(UUID_PATTERN, 'Must be a UUID');
@@ -89,7 +91,7 @@ export const donationSchema = z.object({
 export const importantDateSchema = z.object({
   id: uuid(),
   memberId: uuid(),
-  type: z.enum(["birthday", "yahrzeit", "bar_mitzvah", "bat_mitzvah", "anniversary", 'seuda_hoda\'a']),
+  type: z.enum(IMPORTANT_DATE_TYPES),
   /** Gregorian ISO date of the original event (death date for yahrzeit). */
   date: z.string(),
   /** The event happened after nightfall, so it belongs to the next Hebrew day. */
@@ -98,6 +100,8 @@ export const importantDateSchema = z.object({
   hebrewMonth: z.number().int().min(1).max(13).optional(),
   hebrewYear: z.number().int().min(1).optional(),
   recurring: z.boolean().optional(),
+  /** Repeat on the Hebrew or the English date; unset = the type's default (DEFAULT_RECUR_BY). */
+  recurBy: z.enum(RECUR_BY).optional(),
   note: z.string().optional(),
 });
 
@@ -151,22 +155,29 @@ export const memberDetailSchema = z.object({
 
 export type MemberDetail = z.infer<typeof memberDetailSchema>;
 
-/** An important date with its member/family resolved and its next occurrence computed. */
+/** One occurrence of an important date, with its member/family resolved. Used for the
+ * upcoming list (the next occurrence) and the calendar (every occurrence in a range). */
 export interface UpcomingDate {
   id: string;
   memberId: string;
   memberName: string;
+  familyId: string;
   familyName: string;
   type: ImportantDate['type'];
   /** Original event date (Gregorian ISO, YYYY-MM-DD). */
   date: string;
-  /** The next occurrence on/after today (Gregorian ISO, YYYY-MM-DD). */
+  /** The occurrence (Gregorian ISO, YYYY-MM-DD); for a Hebrew date, the daytime date. */
   nextOccurrence: string;
-  /** Whole days from today to the next occurrence (0 = today). */
+  /** Whole days from today to the occurrence (0 = today). */
   daysUntil: number;
+  /** Hebrew date of the original event, when known. */
   hebrewDay?: number;
   hebrewMonth?: number;
   hebrewYear?: number;
+  /** How it repeats: on the Hebrew or the English anniversary, or not at all. */
+  recurBy: RecurBy | 'once';
+  /** The Hebrew date of the occurrence day itself. */
+  occurrenceHebrew: HebrewDate;
 }
 
 // ---------------------------------------------------------------------------

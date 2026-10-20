@@ -1,5 +1,5 @@
 import express, { type ErrorRequestHandler } from 'express';
-import { ZodError } from 'zod';
+import { ZodError, z } from 'zod';
 import type { ZodObject, ZodRawShape } from 'zod';
 import {
   donationInputSchema,
@@ -8,6 +8,7 @@ import {
   memberInputSchema,
   noteInputSchema,
   pledgeInputSchema,
+  daysBetweenISO,
 } from '@pilzno/shared';
 import type {
   DonationInput,
@@ -42,6 +43,24 @@ app.use((req, res, next) => {
   next();
 });
 
+/**
+ * Validate a PATCH body. Fields left out are unchanged; `null` clears an optional field
+ * (JSON has no `undefined`, so without this a cleared phone number could never be removed).
+ */
+function parsePatch(input: ZodObject<ZodRawShape>, body: unknown): Record<string, unknown> {
+  const fields = z.record(z.unknown()).parse(body);
+  const cleared: Record<string, null> = {};
+  const issues: z.ZodIssue[] = [];
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== null || !(key in input.shape)) continue;
+    if (input.shape[key] instanceof z.ZodOptional) cleared[key] = null;
+    else issues.push({ code: 'custom', path: [key], message: 'Required; it cannot be cleared' });
+    delete fields[key];
+  }
+  if (issues.length > 0) throw new ZodError(issues);
+  return { ...input.partial().parse(fields), ...cleared };
+}
+
 // Standard REST routes for one entity (list/create on /, get/patch/delete on /:id).
 // Entities without a `get` (pledges, donations, ...) simply skip GET /:id.
 function resourceRoutes<I>(
@@ -70,7 +89,7 @@ function resourceRoutes<I>(
     });
   }
   router.patch('/:id', (req, res) => {
-    res.json(e.update(req.params.id, input.partial().parse(req.body) as Partial<I>));
+    res.json(e.update(req.params.id, parsePatch(input, req.body) as Partial<I>));
   });
   router.delete('/:id', (req, res) => {
     if (!e.remove(req.params.id)) throw new repo.NotFound(`${req.originalUrl}: not found`);
@@ -102,6 +121,16 @@ app.use('/api/donations', resourceRoutes<DonationInput>(donationInputSchema, rep
 app.get('/api/important-dates/upcoming', (req, res) => {
   const days = Number(req.query.days ?? 90);
   res.json(repo.upcomingImportantDates(Number.isFinite(days) && days > 0 ? Math.floor(days) : 90));
+});
+// Every occurrence in a date range (the calendar). At most about 13 months per request.
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
+app.get('/api/important-dates/occurrences', (req, res) => {
+  const { from, to } = z.object({ from: isoDateSchema, to: isoDateSchema }).parse(req.query);
+  if (to < from || daysBetweenISO(from, to) > 400) {
+    res.status(400).json({ error: { message: '`to` must be on or after `from`, at most 400 days later' } });
+    return;
+  }
+  res.json(repo.dateOccurrences(from, to));
 });
 app.use(
   '/api/important-dates',

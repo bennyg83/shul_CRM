@@ -109,17 +109,19 @@ and 1 test fails.
 
 - [x] **Found during Phase 0, fixed 2026-10-20:** every MUI `<Select>` wired with `{...register()}` never showed its selected value. All 21 (the six forms plus the Families and Members page drawers) now use `Controller`. Also restored the Edit family dialog, which opened blank since 25be7f4.
 
-## Phase 1 — Domain correctness (shul-critical)
+## Phase 1 — Domain correctness (shul-critical) — ✅ done 2026-10-20
 
-- [ ] **Hebrew-date recurrence** for recurring dates, with a per-date "recur by Hebrew / Gregorian" option (Hebrew is the default for yahrzeits).
-- [ ] Yahrzeit rules (the after-nightfall flag is done in Phase 0): Adar in leap and non-leap years, and 30 Cheshvan/Kislev. Each rule gets unit tests.
-- [ ] Centralize date-type labels and colors (currently copied in 5 files).
-- [ ] Seed important dates with an after-nightfall answer (seeded dates can't be saved from Edit until one is chosen).
-- [ ] Let Edit Note change the linked member (the member dropdown only appears on New).
+- [x] **Hebrew-date recurrence** (`packages/shared/src/recurrence.ts`): each date has `recurBy` (`hebrew | gregorian`); unset means the type's default (Hebrew for yahrzeits, bar/bat mitzvah and seuda hoda'a; English for birthdays and anniversaries). The form asks "Repeats on" and previews the next occurrence. The upcoming list, the dashboard and the calendar all use it.
+- [x] Yahrzeit rules, each with unit tests: Adar of a regular year kept in Adar I in a leap year (Adar II available as an option; becomes a shul setting in Phase 2), Adar II deaths always in the last Adar, 30 Adar I → 30 Sh'vat, and 30 Cheshvan/Kislev decided by the first anniversary. Hebrew birthdays use the matching "last month of the year" rule.
+- [x] **Checkpoint:** 1,680 yahrzeits (84 test deaths, every edge case, before and after nightfall, 20 years each) match Hebcal's yahrzeit calculator exactly.
+- [x] Date-type labels and colors in one place (`packages/shared/src/dateTypes.ts`).
+- [x] Seeded important dates have an after-nightfall answer; a test checks each seeded Hebrew date.
+- [x] Edit Note can change or remove the linked member.
+- [x] **Also fixed:** the Calendar page never received any dates (it now loads `/api/important-dates/occurrences`); the "Repeats annually" checkbox never showed as ticked on edit; a new Birthday was prefilled with the 13th birthday (now the birth date; bar/bat mitzvah get the Hebrew 13th/12th birthday); and clearing an optional field on edit (phone, note member, …) never saved. `PATCH` now treats `null` as "clear", for optional fields only.
 
 ## Phase 2 — Configurability layer (what makes "another shul" possible)
 
-- [ ] **Org profile in Settings:** name, short name, `orgId` (UUID, read-only), address, default currency, locale, timezone, and palette.
+- [ ] **Org profile in Settings:** name, short name, `orgId` (UUID, read-only), address, default currency, locale, timezone, palette, and the Adar yahrzeit custom (Adar I or Adar II).
 - [ ] **Shul logo upload in Settings:**
   - Formats: PNG, JPEG, and WebP, max 2 MB. No SVG, because SVG can carry scripts.
   - Preview before saving, plus "Replace" and "Remove" buttons.

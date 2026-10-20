@@ -101,9 +101,19 @@ Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6
 - **Local-only**: the API binds to `127.0.0.1` (override with `HOST`) until login exists.
 - **Auth work** (login, RBAC, users, family portal) is parked on branch `wip/auth` until ROADMAP Phase 5 (login) and Phase 6 (member portal).
 
+## Phase 1 — Hebrew recurrence (2026-10-20)
+
+- **Recurrence rules** live in `@pilzno/shared/recurrence.ts`: `occurrencesBetween`, `nextOccurrence`,
+  `yahrzeitInYear`, `hebrewAnniversaryInYear`. A date's `recurBy` (`hebrew | gregorian`) defaults by type
+  (`DEFAULT_RECUR_BY` in `dateTypes.ts`). A Hebrew occurrence is the daytime date; it begins the evening before.
+- **API**: `GET /api/important-dates/occurrences?from=&to=` (calendar, max 400 days) and `/upcoming` share
+  `repo.dateOccurrences`. `PATCH` bodies may send `null` to clear an optional field.
+- **Checked** against Hebcal's yahrzeit calculator: 1,680 yahrzeits for 84 test deaths, no differences.
+- **Calendar** shows each month's occurrences with Hebrew day numbers; a click opens the member.
+
 ## Not yet done
 
-See `ROADMAP.md`. Next: Phase 1 (Hebrew-date recurrence for yahrzeits).
+See `ROADMAP.md`. Next: Phase 2 (configurability: org profile, logo, lookup lists, import).
 
 ## Commands
 

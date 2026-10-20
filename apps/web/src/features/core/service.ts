@@ -38,6 +38,10 @@ interface ApiErrorBody {
   error?: { message?: string };
 }
 
+/** A PATCH body: fields set to `undefined` (cleared in a form) are sent as `null`, which the API
+ * reads as "clear this field". JSON.stringify would otherwise drop them and the old value would stay. */
+const patchBody = (input: object) => JSON.stringify(input, (_key, value: unknown) => (value === undefined ? null : value));
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
@@ -80,7 +84,7 @@ export function createFamily(input: FamilyInput): Promise<Family> {
 }
 
 export function updateFamily(id: string, input: Partial<FamilyInput>): Promise<Family> {
-  return request(`/families/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+  return request(`/families/${id}`, { method: 'PATCH', body: patchBody(input) });
 }
 
 export function deleteFamily(id: string): Promise<void> {
@@ -104,7 +108,7 @@ export function createMember(input: MemberInput): Promise<Member> {
 }
 
 export function updateMember(id: string, input: Partial<MemberInput>): Promise<Member> {
-  return request(`/members/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+  return request(`/members/${id}`, { method: 'PATCH', body: patchBody(input) });
 }
 
 export function deleteMember(id: string): Promise<void> {
@@ -124,7 +128,7 @@ export function createPledge(input: PledgeInput): Promise<Pledge> {
 }
 
 export function updatePledge(id: string, input: Partial<PledgeInput>): Promise<Pledge> {
-  return request(`/pledges/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+  return request(`/pledges/${id}`, { method: 'PATCH', body: patchBody(input) });
 }
 
 export function deletePledge(id: string): Promise<void> {
@@ -144,7 +148,7 @@ export function createDonation(input: DonationInput): Promise<Donation> {
 }
 
 export function updateDonation(id: string, input: Partial<DonationInput>): Promise<Donation> {
-  return request(`/donations/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+  return request(`/donations/${id}`, { method: 'PATCH', body: patchBody(input) });
 }
 
 export function deleteDonation(id: string): Promise<void> {
@@ -163,6 +167,11 @@ export function listUpcomingDates(days = 90): Promise<UpcomingDate[]> {
   return request(`/important-dates/upcoming?days=${days}`);
 }
 
+/** Every occurrence of every important date between two ISO dates (inclusive), for the calendar. */
+export function listDateOccurrences(from: string, to: string): Promise<UpcomingDate[]> {
+  return request(`/important-dates/occurrences?from=${from}&to=${to}`);
+}
+
 export function createImportantDate(input: ImportantDateInput): Promise<ImportantDate> {
   return request('/important-dates', { method: 'POST', body: JSON.stringify(input) });
 }
@@ -171,7 +180,7 @@ export function updateImportantDate(
   id: string,
   input: Partial<ImportantDateInput>,
 ): Promise<ImportantDate> {
-  return request(`/important-dates/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+  return request(`/important-dates/${id}`, { method: 'PATCH', body: patchBody(input) });
 }
 
 export function deleteImportantDate(id: string): Promise<void> {
@@ -191,7 +200,7 @@ export function createNote(input: NoteInput): Promise<Note> {
 }
 
 export function updateNote(id: string, input: Partial<NoteInput>): Promise<Note> {
-  return request(`/notes/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+  return request(`/notes/${id}`, { method: 'PATCH', body: patchBody(input) });
 }
 
 export function deleteNote(id: string): Promise<void> {

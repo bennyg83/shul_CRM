@@ -1,63 +1,79 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { Box, Card, CardContent, CircularProgress, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { useQuery } from '@tanstack/react-query';
 import {
-  Box,
-  Card,
-  CardContent,
-  Grid,
-  Typography,
-} from '@mui/material';
-import type { ImportantDate } from '@pilzno/shared';
+  DATE_TYPE_COLOR,
+  DATE_TYPE_LABEL,
+  IMPORTANT_DATE_TYPES,
+  formatHebrew,
+  gregorianToHebrew,
+  hebrewMonthName,
+  type UpcomingDate,
+} from '@pilzno/shared';
+import { listDateOccurrences } from '@/features/core/service';
+import { qk } from '@/features/core/queryKeys';
+import { MemberDetailModal } from '@/features/members/MemberDetailModal';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ] as const;
 
-const TYPE_COLORS: Record<ImportantDate['type'], string> = {
-  birthday: '#4caf50', // green
-  yahrzeit: '#9c27b0', // purple
-  bar_mitzvah: '#2196f3', // blue
-  bat_mitzvah: '#2196f3', // blue
-  anniversary: '#ff9800', // orange
-  "seuda_hoda'a": '#4caf50', // green
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+
+const iso = (year: number, month: number, day: number) =>
+  `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+/** How a date repeats, for the tooltip. */
+const RECUR_NOTE: Record<UpcomingDate['recurBy'], string> = {
+  hebrew: 'by the Hebrew date (begins the evening before)',
+  gregorian: 'by the English date',
+  once: 'one-time',
 };
 
-const TYPE_LABELS: Record<ImportantDate['type'], string> = {
-  birthday: 'Birthday',
-  yahrzeit: 'Yahrzeit (Memorial)',
-  bar_mitzvah: 'Bar Mitzvah',
-  bat_mitzvah: 'Bat Mitzvah',
-  anniversary: 'Anniversary',
-  "seuda_hoda'a": 'Seuda Hoda\'a (Thanksgiving Meal)',
-};
+export function CalendarPage() {
+  const [current, setCurrent] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const { year, month } = current;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const from = iso(year, month, 1);
+  const to = iso(year, month, daysInMonth);
+  const [memberId, setMemberId] = useState<string | null>(null);
 
-/** Parse ISO date to { month (0-11), day } for calendar indexing. */
-function parseDate(iso: string): { month: number; day: number } {
-  const [, m, d] = iso.split('-').map(Number);
-  return { month: m - 1, day: d }; // month is 0-indexed
-}
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: qk.occurrences(from, to),
+    queryFn: () => listDateOccurrences(from, to),
+  });
 
-/** Get days in a given month/year. */
-function getDaysInMonth(year: number, month: number): number {
-  return new Date(year, month + 1, 0).getDate();
-}
+  const byDay = useMemo(() => {
+    const map = new Map<string, UpcomingDate[]>();
+    for (const o of data ?? []) map.set(o.nextOccurrence, [...(map.get(o.nextOccurrence) ?? []), o]);
+    return map;
+  }, [data]);
 
-interface Props {
-  dates?: ImportantDate[];
-}
+  // The Hebrew months this English month spans, e.g. "Tishrei – Cheshvan 5787".
+  const hebrewSpan = useMemo(() => {
+    const a = gregorianToHebrew(from);
+    const b = gregorianToHebrew(to);
+    const left = a.year === b.year ? hebrewMonthName(a.month, a.year) : `${hebrewMonthName(a.month, a.year)} ${a.year}`;
+    return a.month === b.month ? `${left} ${b.year}` : `${left} – ${hebrewMonthName(b.month, b.year)} ${b.year}`;
+  }, [from, to]);
 
-export function CalendarPage({ dates = [] }: Props) {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth(); // 0-11
-  
-  const daysInMonth = getDaysInMonth(year, month);
+  const shift = (delta: number) =>
+    setCurrent(({ year: y, month: m }) => {
+      const d = new Date(y, m + delta, 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
 
-  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
-  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
-  
-
+  const todayIso = (() => {
+    const now = new Date();
+    return iso(now.getFullYear(), now.getMonth(), now.getDate());
+  })();
+  const leadingBlanks = new Date(year, month, 1).getDay();
 
   return (
     <Box>
@@ -67,112 +83,118 @@ export function CalendarPage({ dates = [] }: Props) {
 
       <Card>
         <CardContent>
-          <Grid container alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-            <Typography variant="h6">
-              {MONTHS[month]} {year}
-            </Typography>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
             <Box>
-              <button onClick={prevMonth} style={btnStyle}>←</button>
-              <button onClick={nextMonth} style={{ ...btnStyle, marginLeft: 4 }}>→</button>
+              <Typography variant="h6">
+                {MONTHS[month]} {year}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {hebrewSpan}
+              </Typography>
             </Box>
-          </Grid>
+            <Stack direction="row" alignItems="center" spacing={0.5}>
+              {isLoading && <CircularProgress size={18} sx={{ mr: 1 }} />}
+              <IconButton aria-label="Previous month" onClick={() => shift(-1)}>
+                <ChevronLeftIcon />
+              </IconButton>
+              <IconButton aria-label="Next month" onClick={() => shift(1)}>
+                <ChevronRightIcon />
+              </IconButton>
+            </Stack>
+          </Stack>
 
-          {/* Days of week header */}
-          <Grid container sx={{ mb: 1 }}>
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((dow) => (
-              <Grid item xs={12 / 7} key={dow}>
-                <Typography variant="caption" align="center" color="text.secondary">
-                  {dow}
-                </Typography>
-              </Grid>
+          {isError && (
+            <Typography color="error" sx={{ mb: 2 }}>
+              {(error as Error).message}
+            </Typography>
+          )}
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 0.5 }}>
+            {WEEKDAYS.map((dow) => (
+              <Typography key={dow} variant="caption" align="center" color="text.secondary">
+                {dow}
+              </Typography>
             ))}
-          </Grid>
-
-          {/* Calendar grid */}
-          <Grid container spacing={0.5}>
-            {/* Empty cells for days before the 1st of month */}
-            {Array.from({ length: new Date(year, month, 1).getDay() }).map((_, i) => (
-              <Grid item xs={12 / 7} key={`empty-${i}`} />
+            {Array.from({ length: leadingBlanks }, (_, i) => (
+              <Box key={`blank-${i}`} />
             ))}
-
-            {/* Days of the month */}
             {Array.from({ length: daysInMonth }, (_, i) => {
               const day = i + 1;
-              // Find all dates for this day
-              const dayDates = dates.filter(d => {
-                const parsed = parseDate(d.date);
-                return parsed.month === month && parsed.day === day;
-              });
-              
+              const dayIso = iso(year, month, day);
+              const hebrew = gregorianToHebrew(dayIso);
+              const items = byDay.get(dayIso) ?? [];
               return (
-                <Grid item xs={12 / 7} key={`day-${day}`}>
-                  <Box
-                    sx={{
-                      height: '40px',
-                      border: '1px solid #e0e0e0',
-                      borderRadius: 1,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'flex-start',
-                      pt: 0.5,
-                      backgroundColor: dayDates.length > 0 ? '#f5f5f5' : undefined,
-                    }}
-                  >
-                    <Typography variant="body2" sx={{ mb: 0.5 }}>
+                <Box
+                  key={dayIso}
+                  sx={{
+                    minHeight: 76,
+                    border: 1,
+                    borderColor: dayIso === todayIso ? 'primary.main' : 'divider',
+                    borderRadius: 1,
+                    p: 0.5,
+                    bgcolor: items.length > 0 ? 'action.hover' : undefined,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <Stack direction="row" justifyContent="space-between" alignItems="baseline">
+                    <Typography variant="body2" fontWeight={dayIso === todayIso ? 700 : 400}>
                       {day}
                     </Typography>
-                    {/* Date type indicators (colored dots) */}
-                    {dayDates.map((d, idx) => (
+                    <Typography variant="caption" color="text.secondary" title={formatHebrew(hebrew.day, hebrew.month, hebrew.year)}>
+                      {hebrew.day === 1 ? `1 ${hebrewMonthName(hebrew.month, hebrew.year)}` : hebrew.day}
+                    </Typography>
+                  </Stack>
+                  {items.map((o) => (
+                    <Tooltip
+                      key={`${o.id}-${o.nextOccurrence}`}
+                      title={`${DATE_TYPE_LABEL[o.type]}: ${o.memberName} (${o.familyName}), ${RECUR_NOTE[o.recurBy]}`}
+                    >
                       <Box
-                        key={idx}
+                        component="button"
+                        type="button"
+                        onClick={() => setMemberId(o.memberId)}
                         sx={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: '50%',
-                          backgroundColor: TYPE_COLORS[d.type],
-                          marginBottom: 1,
+                          display: 'block',
+                          width: '100%',
+                          mt: 0.25,
+                          px: 0.5,
+                          border: 0,
+                          borderRadius: 0.5,
+                          bgcolor: DATE_TYPE_COLOR[o.type],
+                          color: '#fff',
+                          font: 'inherit',
+                          fontSize: 11,
+                          lineHeight: 1.6,
+                          textAlign: 'left',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          cursor: 'pointer',
                         }}
-                        title={`${TYPE_LABELS[d.type]} — ${d.memberId}`}
-                      />
-                    ))}
-                  </Box>
-                </Grid>
+                      >
+                        {o.memberName}
+                      </Box>
+                    </Tooltip>
+                  ))}
+                </Box>
               );
             })}
-          </Grid>
+          </Box>
 
-          {/* Legend */}
-          <Grid container spacing={2} sx={{ mt: 2 }}>
-            {Object.entries(TYPE_COLORS).map(([type, color]) => (
-              <Grid item key={type}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <Box
-                    sx={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: '50%',
-                      backgroundColor: color,
-                    }}
-                  />
-                  <Typography variant="caption" color="text.secondary">
-                    {TYPE_LABELS[type as ImportantDate['type']]}
-                  </Typography>
-                </Box>
-              </Grid>
+          <Stack direction="row" flexWrap="wrap" gap={2} sx={{ mt: 2 }}>
+            {IMPORTANT_DATE_TYPES.map((type) => (
+              <Stack key={type} direction="row" alignItems="center" spacing={0.5}>
+                <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: DATE_TYPE_COLOR[type] }} />
+                <Typography variant="caption" color="text.secondary">
+                  {DATE_TYPE_LABEL[type]}
+                </Typography>
+              </Stack>
             ))}
-          </Grid>
+          </Stack>
         </CardContent>
       </Card>
+
+      {memberId && <MemberDetailModal memberId={memberId} open onClose={() => setMemberId(null)} />}
     </Box>
   );
 }
-
-const btnStyle: React.CSSProperties = {
-  padding: '4px 8px',
-  fontSize: '16px',
-  cursor: 'pointer',
-  border: '1px solid #ccc',
-  borderRadius: 2,
-  backgroundColor: '#fff',
-};

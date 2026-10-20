@@ -26,6 +26,8 @@ export const NISAN = 1;
 export const TISHREI = 7;
 export const CHESHVAN = 8;
 export const KISLEV = 9;
+export const TEVET = 10;
+export const SHEVAT = 11;
 export const ADAR = 12; // Adar I in a leap year
 export const ADAR_II = 13;
 

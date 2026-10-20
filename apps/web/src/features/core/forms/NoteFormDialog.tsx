@@ -58,7 +58,7 @@ interface Props {
 }
 
 export function NoteFormDialog({ open, onClose, onSaved, initial, fixedFamilyId, fixedMemberId, members }: Props) {
-  const showMemberSelect = !fixedMemberId && !initial;
+  const showMemberSelect = !fixedMemberId;
   const { data: allMembers } = useQuery({
     queryKey: ['members'],
     queryFn: listMembers,

@@ -47,6 +47,7 @@ import {
 import { Field } from '@/features/core/Field';
 import { MemberDetailModal } from '@/features/members/MemberDetailModal';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { DATE_TYPE_LABEL, effectiveRecurBy } from '@pilzno/shared';
 
 interface Props {
   familyId: string;
@@ -66,14 +67,6 @@ const DONATION_METHOD: Record<Donation['method'], string> = {
   transfer: 'Transfer',
 };
 
-const DATE_TYPE: Record<ImportantDate['type'], string> = {
-  birthday: 'Birthday',
-  yahrzeit: 'Yahrzeit (Memorial)',
-  bar_mitzvah: 'Bar Mitzvah',
-  bat_mitzvah: 'Bat Mitzvah',
-  anniversary: 'Anniversary',
-  "seuda_hoda'a": 'Seuda Hoda\'a (Thanksgiving Meal)',
-};
 
 export function FamilyDetailModal({ familyId, open, onClose }: Props) {
   const queryClient = useQueryClient();
@@ -408,11 +401,11 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
                       <TableBody>
                         {dates.map((d) => (
                           <TableRow key={d.id} hover>
-                            <TableCell>{DATE_TYPE[d.type]}</TableCell>
+                            <TableCell>{DATE_TYPE_LABEL[d.type]}</TableCell>
                             <TableCell>{memberNames.get(d.memberId) ?? d.memberId}</TableCell>
                             <TableCell>{d.date}</TableCell>
                             <TableCell>{d.hebrewDay && d.hebrewMonth && d.hebrewYear ? formatHebrew(d.hebrewDay, d.hebrewMonth, d.hebrewYear) : '—'}</TableCell>
-                            <TableCell>{d.recurring ? 'Yes' : '—'}</TableCell>
+                            <TableCell>{d.recurring ? (effectiveRecurBy(d) === 'hebrew' ? 'Hebrew date' : 'English date') : '—'}</TableCell>
                             <TableCell align="right">
                               <IconButton
                                 size="small"

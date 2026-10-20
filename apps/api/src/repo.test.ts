@@ -134,7 +134,7 @@ describe('repo: dashboardStats math', () => {
 });
 
 describe('repo: upcomingImportantDates', () => {
-  const today = new Date(2026, 9, 14); // local 2026-10-14
+  const today = '2026-10-14';
 
   it('resolves names, rolls recurring dates to the next anniversary, and filters to the window', () => {
     const family = families.create({ name: 'Levi Family', status: 'active' });

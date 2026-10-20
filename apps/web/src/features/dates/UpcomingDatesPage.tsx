@@ -15,19 +15,17 @@ import {
   Typography,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import type { ImportantDate } from '@pilzno/shared';
 import { listUpcomingDates } from '@/features/core/service';
-import { formatHebrew } from '@pilzno/shared';
+import { formatHebrew, type UpcomingDate } from '@pilzno/shared';
 import { qk } from '@/features/core/queryKeys';
+import { DATE_TYPE_LABEL } from '@pilzno/shared';
 
-const DATE_LABELS: Record<ImportantDate['type'], string> = {
-  birthday: 'Birthday',
-  yahrzeit: 'Yahrzeit (Memorial)',
-  bar_mitzvah: 'Bar Mitzvah',
-  bat_mitzvah: 'Bat Mitzvah',
-  anniversary: 'Anniversary',
-  "seuda_hoda'a": 'Seuda Hoda\'a (Thanksgiving Meal)',
-} as const;
+
+const REPEATS: Record<UpcomingDate['recurBy'], string> = {
+  hebrew: 'Yearly (Hebrew date)',
+  gregorian: 'Yearly (English date)',
+  once: 'Once',
+};
 
 const WINDOWS = [
   { days: 30, label: '30 days' },
@@ -82,7 +80,7 @@ export function UpcomingDatesPage() {
       </Stack>
 
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Upcoming birthdays, yahrzeits, and b&apos;nai mitzvah across all families, with the Hebrew date where set.
+        Upcoming birthdays, yahrzeits, and b&apos;nai mitzvah across all families. Yahrzeits and other Hebrew dates fall on their Hebrew anniversary and begin the evening before.
       </Typography>
 
       <Card>
@@ -114,22 +112,22 @@ export function UpcomingDatesPage() {
                   <TableCell>Member</TableCell>
                   <TableCell>Family</TableCell>
                   <TableCell>Type</TableCell>
-                  <TableCell>Hebrew</TableCell>
+                  <TableCell>Hebrew date</TableCell>
+                  <TableCell>Repeats</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {data.map((d) => (
-                  <TableRow key={d.id} hover>
+                  <TableRow key={`${d.id}-${d.nextOccurrence}`} hover>
                     <TableCell>{formatGregorian(d.nextOccurrence)}</TableCell>
                     <TableCell>{daysLabel(d.daysUntil)}</TableCell>
                     <TableCell>{d.memberName}</TableCell>
                     <TableCell>{d.familyName}</TableCell>
-                    <TableCell>{DATE_LABELS[d.type]}</TableCell>
+                    <TableCell>{DATE_TYPE_LABEL[d.type]}</TableCell>
                     <TableCell>
-                      {d.hebrewDay && d.hebrewMonth && d.hebrewYear
-                        ? formatHebrew(d.hebrewDay, d.hebrewMonth, d.hebrewYear)
-                        : '—'}
+                      {formatHebrew(d.occurrenceHebrew.day, d.occurrenceHebrew.month, d.occurrenceHebrew.year)}
                     </TableCell>
+                    <TableCell>{REPEATS[d.recurBy]}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

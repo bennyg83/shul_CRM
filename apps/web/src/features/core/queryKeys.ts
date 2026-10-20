@@ -12,6 +12,7 @@ export const qk = {
   memberDetail: (id: string) => ['memberDetail', id] as const,
   dashboard: ['dashboard-stats'] as const,
   upcoming: (days: number) => ['upcoming-dates', days] as const,
+  occurrences: (from: string, to: string) => ['upcoming-dates', 'range', from, to] as const,
 };
 
 /**
