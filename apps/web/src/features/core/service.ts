@@ -44,6 +44,10 @@ import type {
   OrgProfile,
   Settings,
   Terms,
+  AuditEntry,
+  Role,
+  Session,
+  User,
 } from '@shulcrm/shared';
 
 // ---------------------------------------------------------------------------
@@ -52,6 +56,9 @@ import type {
 // ---------------------------------------------------------------------------
 
 const API = '/api';
+
+/** Fired when the API answers 401 to a signed-in page (the session ended). */
+export const SIGNED_OUT_EVENT = 'shulcrm:signed-out';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -83,6 +90,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
+    // Signed out (session expired, or disabled): let the app go back to the sign-in page.
+    if (res.status === 401 && !path.startsWith('/auth/')) window.dispatchEvent(new Event(SIGNED_OUT_EVENT));
     let message = `Request failed: ${res.status} ${res.statusText}`;
     try {
       const body = (await res.json()) as ApiErrorBody;
@@ -451,3 +460,46 @@ export const deleteBackup = (name: string) =>
   request<void>(`/backups/${encodeURIComponent(name)}`, { method: 'DELETE' });
 export const backupDownloadUrl = (name: string) =>
   `${API}/backups/${encodeURIComponent(name)}/download`;
+
+// ---------------------------------------------------------------------------
+// Sign-in, users, audit log
+// ---------------------------------------------------------------------------
+
+/** The shul's name, colors and logo: all the sign-in page may know. */
+export interface PublicBranding {
+  name: string;
+  shortName: string;
+  primaryColor: string;
+  secondaryColor: string;
+  locale: string;
+  hasLogo: boolean;
+  logoVersion?: string;
+}
+
+export const getPublicBranding = () => request<PublicBranding>('/settings/public');
+export const getSession = () => request<Session>('/auth/session');
+export const login = (email: string, password: string) =>
+  request<Session>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+export const logout = () => request<void>('/auth/logout', { method: 'POST', body: '{}' });
+export const setupOwner = (input: { name: string; email: string; password: string; code?: string }) =>
+  request<Session>('/auth/setup', { method: 'POST', body: JSON.stringify(input) });
+export const describeLink = (token: string) =>
+  request<{ name: string; email: string; purpose: 'invite' | 'reset' }>(`/auth/token/${encodeURIComponent(token)}`);
+export const acceptLink = (token: string, password: string) =>
+  request<Session>(`/auth/token/${encodeURIComponent(token)}`, { method: 'POST', body: JSON.stringify({ password }) });
+export const changePassword = (currentPassword: string, newPassword: string) =>
+  request<void>('/auth/password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
+
+export const listUsers = () => request<User[]>('/users');
+export const inviteUser = (input: { name: string; email: string; role: Role; memberId?: string }) =>
+  request<{ user: User; link: string }>('/users', { method: 'POST', body: JSON.stringify(input) });
+export const updateUser = (id: string, patch: { role?: Role; status?: 'active' | 'disabled'; name?: string }) =>
+  request<User>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+export const newUserLink = (id: string) =>
+  request<{ user: User; link: string; purpose: 'invite' | 'reset' }>(`/users/${id}/link`, { method: 'POST', body: '{}' });
+
+export const getAuditLog = (query: { entity?: string; entityId?: string; before?: string; limit?: number } = {}) => {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) if (v !== undefined && v !== '') params.set(k, String(v));
+  return request<AuditEntry[]>(`/audit${params.size ? `?${params}` : ''}`);
+};

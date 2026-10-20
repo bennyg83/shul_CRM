@@ -10,9 +10,15 @@ process.env.CRM_DATA_DIR = TEST_DATA_DIR;
 
 const { app, prepareData } = await import('./app.ts');
 const { db } = await import('./db.ts');
-const api = request(app);
+// Every /api route needs a signed-in user, so the agent keeps the session cookie for all of them.
+const api = request.agent(app);
 
-beforeAll(() => prepareData()); // seeds the demo data
+beforeAll(async () => {
+  await prepareData(); // seeds the demo data
+  // First run has no users: setup makes the owner and signs this agent in.
+  const res = await api.post('/api/auth/setup').send({ name: 'Owner', email: 'owner@example.test', password: 'correct horse battery' });
+  expect(res.status).toBe(200);
+});
 
 afterAll(() => {
   try {

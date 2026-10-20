@@ -25,10 +25,13 @@ import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CelebrationIcon from '@mui/icons-material/Celebration';
 import AssessmentIcon from '@mui/icons-material/Assessment';
+import BadgeIcon from '@mui/icons-material/Badge';
 import MenuIcon from '@mui/icons-material/Menu';
 import { useSettings } from '@/features/settings/useSettings';
 import { logoUrl } from '@/features/core/service';
 import { initials } from '@/app/initials';
+import { useAuth } from '@/features/auth/useAuth';
+import { UserMenu } from '@/features/auth/UserMenu';
 
 const DRAWER_WIDTH = 256;
 
@@ -79,6 +82,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { org, features, t } = useSettings();
+  const { can } = useAuth();
 
   // Close the phone menu after navigating.
   useEffect(() => setMobileOpen(false), [location.pathname]);
@@ -96,7 +100,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     { label: 'Calendar', path: '/calendar', icon: <CalendarMonthIcon /> },
     ...(features.events ? [{ label: 'Events', path: '/events', icon: <CelebrationIcon /> }] : []),
     { label: 'Reports', path: '/reports', icon: <AssessmentIcon /> },
-    { label: 'Settings', path: '/settings', icon: <SettingsIcon /> },
+    ...(can('users.manage') ? [{ label: 'Users', path: '/users', icon: <BadgeIcon /> }] : []),
+    // Settings holds nothing a staff member or viewer is allowed to change.
+    ...(can('settings.write') ? [{ label: 'Settings', path: '/settings', icon: <SettingsIcon /> }] : []),
   ];
   const divider = alpha(theme.palette.primary.main, 0.12);
 
@@ -187,6 +193,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </Typography>
               </>
             )}
+            <Box sx={{ flexGrow: 1 }} />
+            <UserMenu />
           </Toolbar>
         </AppBar>
         <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1200, mx: 'auto' }}>{children}</Box>

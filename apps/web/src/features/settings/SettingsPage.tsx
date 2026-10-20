@@ -11,6 +11,8 @@ import { FeaturesSettings, TermsSettings } from './TermsFeaturesSettings';
 import { ImportExport } from './ImportExport';
 import { EmailSettings } from './EmailSettings';
 import { Backups } from './Backups';
+import { AuditLog } from './AuditLog';
+import { useAuth } from '@/features/auth/useAuth';
 
 const TABS = [
   { key: 'org', label: 'Organization' },
@@ -19,6 +21,7 @@ const TABS = [
   { key: 'features', label: 'Features' },
   { key: 'email', label: 'Email' },
   { key: 'data', label: 'Data' },
+  { key: 'activity', label: 'Activity' },
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
 
@@ -81,7 +84,9 @@ function DemoData() {
 
 export function SettingsPage() {
   const [params, setParams] = useSearchParams();
-  const tab: TabKey = TABS.some((t) => t.key === params.get('tab'))
+  const { can } = useAuth();
+  const tabs = TABS.filter((t) => t.key !== 'activity' || can('audit.read'));
+  const tab: TabKey = tabs.some((t) => t.key === params.get('tab'))
     ? (params.get('tab') as TabKey)
     : 'org';
 
@@ -97,7 +102,7 @@ export function SettingsPage() {
         allowScrollButtonsMobile
         sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
       >
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <Tab key={t.key} value={t.key} label={t.label} />
         ))}
       </Tabs>
@@ -108,11 +113,12 @@ export function SettingsPage() {
       {tab === 'email' && <EmailSettings />}
       {tab === 'data' && (
         <Stack spacing={2}>
-          <Backups />
-          <ImportExport />
-          <DemoData />
+          {can('backups') && <Backups />}
+          {can('data.import') && <ImportExport />}
+          {can('data.reset') && <DemoData />}
         </Stack>
       )}
+      {tab === 'activity' && <AuditLog />}
     </Box>
   );
 }

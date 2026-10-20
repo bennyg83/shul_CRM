@@ -40,16 +40,18 @@ export default defineConfig({
       },
     },
   },
+  // changeOrigin stays false so the API sees the browser's own host (localhost:5173) and the
+  // invitation links it builds point at the app, not at the API's port.
   server: {
     port: 5173,
     open: false,
     proxy: {
-      '/api': { target: 'http://localhost:3000', changeOrigin: true },
+      '/api': { target: 'http://localhost:3000', changeOrigin: false },
     },
   },
   preview: {
     proxy: {
-      '/api': { target: 'http://localhost:3000', changeOrigin: true },
+      '/api': { target: 'http://localhost:3000', changeOrigin: false },
     },
   },
 });

@@ -52,7 +52,7 @@ multi-tenant later stays possible.
 | Excel import | own reader/writer over `fflate` (MIT); `exceljs` rejected (unlicensed dependency) | MIT |
 | PDF receipts/letters | browser print (Save as PDF); `pdf-lib` would bring `pako` (Zlib) | — |
 | Email sending | `nodemailer` | MIT-0 |
-| Security headers / rate limit | `helmet`, `express-rate-limit` | MIT |
+| Security headers / rate limit | `helmet`, `express-rate-limit` (in use) | MIT |
 | Logging | `pino` (in use) | MIT |
 | API tests | `supertest` (in use) | MIT |
 | Image upload | none needed; `express.raw()` (built into Express) | — |
@@ -156,17 +156,19 @@ and 1 test fails.
 - [x] **Logging** (`pino`, JSON lines): one line per request with the path (ids and backup names replaced by placeholders, no query strings), status and time; no bodies, names or emails; silent in tests.
 - [x] **Dependencies:** `npm audit` from 19 findings to **0**: react-router 7, Vite 7, Vitest 4, typescript-eslint 8. Vite 8 / Vitest 5 avoided because they need MPL-2.0 `lightningcss`.
 
-## Phase 5 — Login, users and roles (moved here by request)
+## Phase 5 — Login, users and roles — ✅ done 2026-10-20
 
-Starts from the `wip/auth` branch, with its bugs fixed:
+Written fresh rather than from `wip/auth`: that branch never built, and its empty tables are dropped by migration 4.
 
-- [ ] `/api/auth/login|logout|session`, an `httpOnly` session cookie, and `requireAuth` on all `/api/*`.
-- [ ] `crypto.scrypt` + salt + `timingSafeEqual`; user IDs are UUIDs.
-- [ ] First-run owner setup (env vars or a setup screen).
-- [ ] Fixed roles `owner | admin | staff | viewer | member` with a permission map in `shared`, enforced on the API and in the UI. A `member` user is linked to one member record and can only reach their own family (used by Phase 6).
-- [ ] Users page: invite (copyable link, or email once Phase 3 email exists), deactivate, change role.
-- [ ] `helmet`, a CORS lock-down, and login rate limiting (`express-rate-limit`).
-- [ ] `createdBy` on records plus an audit log.
+- [x] `/api/auth/{session,login,logout,setup,password,token/:token}`, an `httpOnly` `SameSite=Lax` session cookie (only the token's SHA-256 is stored), and a permission check in front of every `/api/*` route.
+- [x] `crypto.scrypt` with a per-user salt and `timingSafeEqual`; the cost is recorded in the hash so it can be raised later. A wrong password and an unknown address take the same work and give the same message.
+- [x] First-run owner setup: a setup screen on this machine, a one-time code (printed in the log) from anywhere else, or `OWNER_EMAIL`/`OWNER_PASSWORD` for Docker. Behind a proxy the code is always required, since every visitor then arrives from loopback.
+- [x] Roles `owner | admin | staff | viewer | member` with the permission map in `packages/shared/src/auth.ts`, enforced by a route-prefix table on the API and used by the web app to hide what you cannot do. A `member` user is tied to one member record, ready for Phase 6.
+- [x] Users page: invite (the link is shown once to copy by hand, since email may not be set up), change role, disable and re-enable, and new invite/reset links. The last active owner cannot be demoted or disabled; only an owner may make or change an owner.
+- [x] `helmet`, same-origin-only requests (no CORS headers; an Origin check on every write), and rate limiting on the sign-in, setup and link routes.
+- [x] `createdBy` on records plus an audit log (who, when, and the fields that changed), shown under Settings → Activity.
+- [x] **Found and fixed while testing:** Express matches routes case-insensitively and builds its router on the first `app.use`, so `POST /api/RESET` reached the reset route past a permission table written in lower case. Fixed in two independent ways — the setting now precedes every `app.use`, and the permission check lower-cases the path — with the rule table also denying by default. A regression test covers five spellings.
+- [x] 110 API tests, including the whole permission matrix per role.
 
 ## Phase 6 — Member portal
 

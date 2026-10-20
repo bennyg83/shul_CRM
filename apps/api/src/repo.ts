@@ -1,5 +1,6 @@
 import { db } from './db.ts';
 import { getLookups, recurrenceOptions } from './settings.ts';
+import { currentUser } from './context.ts';
 
 // ---------------------------------------------------------------------------
 // Data access for the six core entities. Column names mirror the JSON field
@@ -50,8 +51,13 @@ export function get<T>(table: string, id: string): T | undefined {
   return row ? clean<T>(table, row) : undefined;
 }
 
+/** Tables whose rows remember who created them (the signed-in user, if any). */
+const CREATED_BY = new Set(['families', 'members', 'pledges', 'donations', 'importantDates', 'notes', 'events']);
+
 export function insert<T>(table: string, row: object): T {
-  const rec = toRecord(row);
+  const rec = { ...toRecord(row) };
+  const user = currentUser();
+  if (CREATED_BY.has(table) && user && rec.createdBy === undefined) rec.createdBy = user.id;
   const cols = Object.keys(rec);
   db.prepare(`INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(
     ...cols.map((c) => toParam(rec[c]))

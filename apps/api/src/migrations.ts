@@ -337,10 +337,82 @@ function eventsAndEmail(db: DatabaseSync): void {
   `);
 }
 
+/** 4 — Users, sessions, invite/reset links, the audit log, and who created each record. */
+function usersAndAudit(db: DatabaseSync): void {
+  // An abandoned attempt at login (the parked `wip/auth` branch) left its own empty tables in any
+  // database it was ever run against, including a `users` table of a different shape. It never
+  // shipped and never held data, so clear it away rather than try to carry it forward.
+  db.exec(`
+    DROP TABLE IF EXISTS user_roles;
+    DROP TABLE IF EXISTS role_permissions;
+    DROP TABLE IF EXISTS invitations;
+    DROP TABLE IF EXISTS sessions;
+    DROP TABLE IF EXISTS permissions;
+    DROP TABLE IF EXISTS roles;
+    DROP TABLE IF EXISTS users;
+  `);
+
+  db.exec(`
+    CREATE TABLE users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL,
+      memberId TEXT REFERENCES members(id) ON DELETE SET NULL,
+      passwordHash TEXT,
+      status TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      lastLoginAt TEXT
+    );
+
+    -- Only a hash of each token is stored, so a copy of the database can't be used to sign in.
+    CREATE TABLE sessions (
+      tokenHash TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      createdAt TEXT NOT NULL,
+      lastSeenAt TEXT NOT NULL,
+      expiresAt TEXT NOT NULL
+    );
+    CREATE INDEX idx_sessions_user ON sessions(userId);
+
+    -- Invitations and password-reset links (one use each).
+    CREATE TABLE userTokens (
+      tokenHash TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      purpose TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      expiresAt TEXT NOT NULL
+    );
+
+    CREATE TABLE auditLog (
+      id TEXT PRIMARY KEY,
+      at TEXT NOT NULL,
+      userId TEXT,
+      userName TEXT,
+      action TEXT NOT NULL,
+      entity TEXT,
+      entityId TEXT,
+      summary TEXT,
+      changes TEXT
+    );
+    CREATE INDEX idx_audit_at ON auditLog(at);
+    CREATE INDEX idx_audit_entity ON auditLog(entity, entityId);
+
+    ALTER TABLE families ADD COLUMN createdBy TEXT;
+    ALTER TABLE members ADD COLUMN createdBy TEXT;
+    ALTER TABLE pledges ADD COLUMN createdBy TEXT;
+    ALTER TABLE donations ADD COLUMN createdBy TEXT;
+    ALTER TABLE importantDates ADD COLUMN createdBy TEXT;
+    ALTER TABLE notes ADD COLUMN createdBy TEXT;
+    ALTER TABLE events ADD COLUMN createdBy TEXT;
+  `);
+}
+
 const MIGRATIONS: Migration[] = [
   { version: 1, name: 'baseline', ownTransactions: true, up: baseline },
   { version: 2, name: 'settings and files', foreignKeysOff: true, up: settingsAndFiles },
   { version: 3, name: 'events, RSVPs, email log', up: eventsAndEmail },
+  { version: 4, name: 'users, sessions, audit log', up: usersAndAudit },
 ];
 
 /** The schema version this code expects. */

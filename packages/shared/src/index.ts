@@ -6,3 +6,4 @@ export * from './recurrence.ts';
 export * from './settings.ts';
 export * from './importSpecs.ts';
 export * from './operations.ts';
+export * from './auth.ts';

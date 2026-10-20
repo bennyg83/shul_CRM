@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { AppShell } from './layout/AppShell';
+import { AuthGate } from '@/features/auth/AuthGate';
 
 // Route-level code splitting: each page is its own chunk, loaded on navigation.
 // Pages use named exports, so we adapt them to the default export React.lazy expects.
@@ -33,6 +34,12 @@ const EventsPage = lazy(() =>
 );
 const ReportsPage = lazy(() =>
   import('@/features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })),
+);
+const UsersPage = lazy(() =>
+  import('@/features/users/UsersPage').then((m) => ({ default: m.UsersPage })),
+);
+const WelcomePage = lazy(() =>
+  import('@/features/auth/WelcomePage').then((m) => ({ default: m.WelcomePage })),
 );
 
 // Printable documents, without the app's sidebar (Print → Save as PDF).
@@ -73,6 +80,7 @@ function MainRoutes() {
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/users" element={<UsersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -81,16 +89,34 @@ function MainRoutes() {
   );
 }
 
+/** Everything behind the sign-in screen: the printable pages and the app itself. */
+function SignedInRoutes() {
+  return (
+    <Routes>
+      <Route path="/print/receipt/:donationId" element={<ReceiptPrint />} />
+      <Route path="/print/statement/:familyId" element={<StatementPrint />} />
+      <Route path="/print/statements" element={<StatementsPrint />} />
+      <Route path="/print/yahrzeit-letters" element={<YahrzeitLettersPrint />} />
+      <Route path="/print/yahrzeit-list" element={<YahrzeitListPrint />} />
+      <Route path="*" element={<MainRoutes />} />
+    </Routes>
+  );
+}
+
 export function App() {
   return (
     <Suspense fallback={<RouteFallback />}>
       <Routes>
-        <Route path="/print/receipt/:donationId" element={<ReceiptPrint />} />
-        <Route path="/print/statement/:familyId" element={<StatementPrint />} />
-        <Route path="/print/statements" element={<StatementsPrint />} />
-        <Route path="/print/yahrzeit-letters" element={<YahrzeitLettersPrint />} />
-        <Route path="/print/yahrzeit-list" element={<YahrzeitListPrint />} />
-        <Route path="*" element={<MainRoutes />} />
+        {/* The one page someone who is not signed in can reach: their invitation or reset link. */}
+        <Route path="/welcome/:token" element={<WelcomePage />} />
+        <Route
+          path="*"
+          element={
+            <AuthGate>
+              <SignedInRoutes />
+            </AuthGate>
+          }
+        />
       </Routes>
     </Suspense>
   );

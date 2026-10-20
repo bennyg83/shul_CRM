@@ -98,7 +98,7 @@ Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6
   anniversary and seuda hoda'a save. Types are validated by zod.
 - **Licenses**: `npm run license:check` fails on anything outside MIT/ISC/BSD/Apache-2.0/etc. (552 packages pass).
   vitest pinned to 3.x to drop MPL `lightningcss`.
-- **Local-only**: the API binds to `127.0.0.1` (override with `HOST`) until login exists.
+- **Local-only by default**: the API binds to `127.0.0.1`; set `HOST=0.0.0.0` to put it on the network now that login exists.
 - **Auth work** (login, RBAC, users, family portal) is parked on branch `wip/auth` until ROADMAP Phase 5 (login) and Phase 6 (member portal).
 
 ## Phase 1 — Hebrew recurrence (2026-10-20)
@@ -140,9 +140,22 @@ Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6
 - **Backups**: `apps/api/src/backups.ts` → `apps/api/data/backups/`. **Logging**: `apps/api/src/log.ts` (`LOG_LEVEL`).
 - **Checks**: `npm run check` (licenses, lint, types, 91 tests, build); CI does the same plus `npm audit`.
 
+## Phase 5 — Login, users and roles (2026-10-20)
+
+- **API**: `apps/api/src/auth.ts` (scrypt, sessions, invites, setup), `context.ts` (who is asking, via AsyncLocalStorage),
+  `audit.ts` (the log and field diffs). The `RULES` table at the top of `app.ts` maps route prefixes to permissions and
+  denies anything it does not recognise; paths are matched lower-cased and Express routes case-sensitively.
+- **Shared**: `packages/shared/src/auth.ts` — roles, `ROLE_PERMISSIONS`, `can()`, `canAssignRole()`, and the form schemas.
+- **Web**: `features/auth/` (AuthGate, Login, Setup, Welcome, UserMenu, ChangePassword), `features/users/UsersPage.tsx`,
+  `features/settings/AuditLog.tsx`. `useAuth()` gives the user and `can()`; a 401 anywhere returns to the sign-in page.
+- **Migration 4** adds users, sessions, userTokens and auditLog, and drops the empty tables the abandoned `wip/auth`
+  branch left behind.
+- **Dev login**: the local owner account's details are in `apps/api/data/dev-owner.txt` (that folder is gitignored).
+- **Tests**: 110.
+
 ## Not yet done
 
-See `ROADMAP.md`. Next: Phase 5 (login, users and roles).
+See `ROADMAP.md`. Next: Phase 6 (member portal), then Phase 7 (packaging).
 
 ## Commands
 

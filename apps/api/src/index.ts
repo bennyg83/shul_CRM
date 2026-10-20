@@ -8,7 +8,7 @@ import { log } from './log.ts';
 // Dev: `npm run dev:api` from the repo root (node --watch, port 3000).
 // ---------------------------------------------------------------------------
 
-prepareData();
+await prepareData();
 scheduleBackups((msg) => log.info({ area: 'backup' }, msg));
 
 const PORT = Number(process.env.PORT ?? 3000);
