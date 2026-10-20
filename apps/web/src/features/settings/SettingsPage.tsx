@@ -9,12 +9,14 @@ import { OrgSettings } from './OrgSettings';
 import { ListsSettings } from './ListsSettings';
 import { FeaturesSettings, TermsSettings } from './TermsFeaturesSettings';
 import { ImportExport } from './ImportExport';
+import { EmailSettings } from './EmailSettings';
 
 const TABS = [
   { key: 'org', label: 'Organization' },
   { key: 'lists', label: 'Lists' },
   { key: 'terms', label: 'Terms' },
   { key: 'features', label: 'Features' },
+  { key: 'email', label: 'Email' },
   { key: 'data', label: 'Data' },
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
@@ -102,6 +104,7 @@ export function SettingsPage() {
       {tab === 'lists' && <ListsSettings />}
       {tab === 'terms' && <TermsSettings />}
       {tab === 'features' && <FeaturesSettings />}
+      {tab === 'email' && <EmailSettings />}
       {tab === 'data' && (
         <Stack spacing={2}>
           <ImportExport />

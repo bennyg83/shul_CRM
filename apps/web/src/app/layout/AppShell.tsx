@@ -23,6 +23,8 @@ import EventNoteIcon from '@mui/icons-material/EventNote';
 import StarIcon from '@mui/icons-material/Star';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import SettingsIcon from '@mui/icons-material/Settings';
+import CelebrationIcon from '@mui/icons-material/Celebration';
+import AssessmentIcon from '@mui/icons-material/Assessment';
 import MenuIcon from '@mui/icons-material/Menu';
 import { useSettings } from '@/features/settings/useSettings';
 import { logoUrl } from '@/features/core/service';
@@ -92,6 +94,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     },
     { label: 'Important Dates', path: '/dates', icon: <EventNoteIcon /> },
     { label: 'Calendar', path: '/calendar', icon: <CalendarMonthIcon /> },
+    ...(features.events ? [{ label: 'Events', path: '/events', icon: <CelebrationIcon /> }] : []),
+    { label: 'Reports', path: '/reports', icon: <AssessmentIcon /> },
     { label: 'Settings', path: '/settings', icon: <SettingsIcon /> },
   ];
   const divider = alpha(theme.palette.primary.main, 0.12);

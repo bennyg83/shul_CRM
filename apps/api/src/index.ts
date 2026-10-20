@@ -9,6 +9,11 @@ import {
   noteInputSchema,
   pledgeInputSchema,
   IMPORT_ENTITIES,
+  REPORTS,
+  eventInputSchema,
+  rsvpInputSchema,
+  type EventInput,
+  type ReportKey,
   IMPORT_SPECS,
   LOOKUP_KINDS,
   type ImportEntity,
@@ -27,6 +32,10 @@ import type {
 import * as repo from './repo.ts';
 import * as settings from './settings.ts';
 import * as importExport from './importExport.ts';
+import * as events from './events.ts';
+import * as documents from './documents.ts';
+import * as email from './email.ts';
+import * as reports from './reports.ts';
 import { readTable, writeCsv, writeXlsx } from './spreadsheet.ts';
 
 // ---------------------------------------------------------------------------
@@ -160,6 +169,87 @@ app.put(
 app.delete('/api/org/logo', (_req, res) => {
   settings.removeLogo();
   res.status(204).end();
+});
+
+// Events and RSVPs. /summary is registered before the resource router so it isn't read as an id.
+app.get('/api/events/summary', (req, res) => {
+  const { from, to } = z.object({ from: isoDateSchema.optional(), to: isoDateSchema.optional() }).parse(req.query);
+  res.json(events.eventSummaries(from, to));
+});
+app.get('/api/events/:id/detail', (req, res) => {
+  res.json(events.eventDetail(req.params.id));
+});
+app.use('/api/events', resourceRoutes<EventInput>('events', eventInputSchema, events.events));
+app.put('/api/rsvps', (req, res) => {
+  res.json(events.saveRsvp(rsvpInputSchema.parse(req.body)));
+});
+app.delete('/api/rsvps/:id', (req, res) => {
+  if (!events.removeRsvp(req.params.id)) throw new repo.NotFound('RSVP not found');
+  res.status(204).end();
+});
+
+// Printable documents (the web prints them; Save as PDF gives a PDF).
+const yearSchema = z.coerce.number().int().min(1900).max(2200);
+app.get('/api/documents/receipt/:donationId', (req, res) => {
+  res.json(documents.receipt(req.params.donationId));
+});
+app.get('/api/documents/statement/:familyId', (req, res) => {
+  res.json(documents.statement(req.params.familyId, yearSchema.parse(req.query.year)));
+});
+app.get('/api/documents/statements', (req, res) => {
+  res.json(documents.statements(yearSchema.parse(req.query.year)));
+});
+app.get('/api/documents/yahrzeits', (req, res) => {
+  const { from, to } = z.object({ from: isoDateSchema, to: isoDateSchema }).parse(req.query);
+  if (to < from || daysBetweenISO(from, to) > 400) throw new settings.BadRequest('Choose a range of at most 400 days');
+  res.json(documents.yahrzeitNotices(from, to));
+});
+
+// Email: settings (password write-only), templates, sending, and the log.
+app.get('/api/email/settings', (_req, res) => {
+  res.json(email.emailSettingsView());
+});
+app.put('/api/email/settings', (req, res) => {
+  res.json(email.saveEmailSettings(req.body));
+});
+app.get('/api/email/templates', (_req, res) => {
+  res.json(email.getTemplates());
+});
+app.put('/api/email/templates', (req, res) => {
+  res.json(email.saveTemplates(req.body));
+});
+app.post('/api/email/send', async (req, res, next) => {
+  try {
+    res.json(await email.sendEmails(req.body));
+  } catch (err) {
+    next(err);
+  }
+});
+app.post('/api/email/test', async (req, res, next) => {
+  try {
+    res.json(await email.sendTestEmail((req.body as { to?: unknown })?.to));
+  } catch (err) {
+    next(err);
+  }
+});
+app.get('/api/email/log', (_req, res) => {
+  res.json(email.emailLog());
+});
+
+// Reports, as JSON or CSV (?format=csv).
+app.get('/api/reports/:key', (req, res) => {
+  const key = req.params.key;
+  if (!REPORTS.some((r) => r.key === key)) throw new repo.NotFound(`No report "${key}"`);
+  const year = req.query.year === undefined ? new Date().getFullYear() : yearSchema.parse(req.query.year);
+  const table = reports.report(key as ReportKey, year);
+  if (req.query.format === 'csv') {
+    const name = `${settings.getOrg().shortName}-${key}-${year}`.replace(/[^\p{L}\p{N}._-]+/gu, '-');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(name)}.csv`);
+    res.send(writeCsv(table.columns, table.rows));
+    return;
+  }
+  res.json(table);
 });
 
 // Import (CSV or Excel): parse the upload, preview with a column mapping, then commit.

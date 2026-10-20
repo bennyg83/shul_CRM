@@ -1,7 +1,6 @@
 import { Box, Card, CardContent, Typography } from '@mui/material';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
 
-
 interface Props {
   title: string;
   description?: string;

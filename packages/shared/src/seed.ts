@@ -398,7 +398,10 @@ export const seedImportantDates: ImportantDate[] = [
     hebrewDay: 4,
     hebrewMonth: 8,
     hebrewYear: 5780,
-    note: 'Father — candle lit on Friday evening',
+    personName: 'Avraham Cohen',
+    personHebrewName: 'אברהם בן יצחק',
+    relationship: 'Father',
+    note: 'Candle lit on Friday evening',
   },
   {
     id: '00000000-0000-7000-8000-000500000003',
@@ -410,7 +413,9 @@ export const seedImportantDates: ImportantDate[] = [
     hebrewDay: 1,
     hebrewMonth: 3,
     hebrewYear: 5781,
-    note: 'Mother',
+    personName: 'Rivka Weiss',
+    personHebrewName: 'רבקה בת שרה',
+    relationship: 'Mother',
   },
   {
     id: '00000000-0000-7000-8000-000500000004',

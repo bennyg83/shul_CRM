@@ -433,8 +433,7 @@ function ImportWizard() {
             <>
               <Alert severity="success">
                 Imported {label(entity, result.created)}
-                {result.newFamilies > 0 &&
-                  `, created ${label('families', result.newFamilies)}`}
+                {result.newFamilies > 0 && `, created ${label('families', result.newFamilies)}`}
                 {result.newListItems > 0 &&
                   `, added ${result.newListItems} list item${result.newListItems === 1 ? '' : 's'}`}
                 .

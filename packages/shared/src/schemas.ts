@@ -93,6 +93,11 @@ export const importantDateSchema = z.object({
   recurring: z.boolean().optional(),
   /** Repeat on the Hebrew or the English date; unset = the type's default (DEFAULT_RECUR_BY). */
   recurBy: z.enum(RECUR_BY).optional(),
+  /** Who the date is for when that isn't the member: the person a yahrzeit remembers. */
+  personName: z.string().optional(),
+  personHebrewName: z.string().optional(),
+  /** The person's relationship to the member, e.g. "Father". */
+  relationship: z.string().optional(),
   note: z.string().optional(),
 });
 

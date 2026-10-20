@@ -18,7 +18,11 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const settings = useSettings();
   const { t, moneyTotals } = settings;
-  const { data: stats, isLoading, isError } = useQuery({
+  const {
+    data: stats,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: getDashboardStats,
   });
@@ -28,17 +32,41 @@ export function DashboardPage() {
   });
 
   const kpis = [
-    { label: t('families'), value: stats ? String(stats.families) : '—', hint: `${stats?.activeFamilies ?? 0} active` },
-    { label: t('members'), value: stats ? String(stats.members) : '—', hint: `${stats?.activeMembers ?? 0} active` },
+    {
+      label: t('families'),
+      value: stats ? String(stats.families) : '—',
+      hint: `${stats?.activeFamilies ?? 0} active`,
+    },
+    {
+      label: t('members'),
+      value: stats ? String(stats.members) : '—',
+      hint: `${stats?.activeMembers ?? 0} active`,
+    },
     ...(settings.features.pledges
-      ? [{ label: `Open ${t('pledges')}`, value: stats ? moneyTotals(stats.openPledgeBalance) : '—', hint: 'Remaining balance' }]
+      ? [
+          {
+            label: `Open ${t('pledges')}`,
+            value: stats ? moneyTotals(stats.openPledgeBalance) : '—',
+            hint: 'Remaining balance',
+          },
+        ]
       : []),
-    { label: `${t('donations')} (YTD)`, value: stats ? moneyTotals(stats.donatedYtd) : '—', hint: 'Year to date' },
+    {
+      label: `${t('donations')} (YTD)`,
+      value: stats ? moneyTotals(stats.donatedYtd) : '—',
+      hint: 'Year to date',
+    },
   ];
 
   return (
     <Box>
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={2} sx={{ mb: 3 }}>
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        justifyContent="space-between"
+        alignItems={{ sm: 'center' }}
+        spacing={2}
+        sx={{ mb: 3 }}
+      >
         <Box>
           <Typography variant="h5">Dashboard</Typography>
           <Typography variant="body2" color="text.secondary">
@@ -46,7 +74,11 @@ export function DashboardPage() {
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
-          <Button variant="outlined" startIcon={<PersonAddIcon />} onClick={() => navigate('/families')}>
+          <Button
+            variant="outlined"
+            startIcon={<PersonAddIcon />}
+            onClick={() => navigate('/families')}
+          >
             {`New ${t('family')}`}
           </Button>
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/members')}>
@@ -92,7 +124,12 @@ export function DashboardPage() {
           ) : upcoming && upcoming.length > 0 ? (
             <Stack spacing={1}>
               {upcoming.slice(0, 5).map((d) => (
-                <Stack key={`${d.id}-${d.nextOccurrence}`} direction="row" alignItems="baseline" spacing={2}>
+                <Stack
+                  key={`${d.id}-${d.nextOccurrence}`}
+                  direction="row"
+                  alignItems="baseline"
+                  spacing={2}
+                >
                   <Typography variant="body2" sx={{ width: 90, flexShrink: 0 }}>
                     {shortDate(d.nextOccurrence)}
                   </Typography>

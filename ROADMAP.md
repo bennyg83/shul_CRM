@@ -49,8 +49,8 @@ multi-tenant later stays possible.
 | Hebrew calendar | none needed; our own module (see Phase 0) | ours |
 | Password hashing | none needed; `crypto.scrypt` built into Node | — |
 | CSV import/export | `papaparse` | MIT |
-| Excel import | `exceljs` | MIT |
-| PDF receipts/letters | `pdf-lib` or `pdfkit` | MIT |
+| Excel import | own reader/writer over `fflate` (MIT); `exceljs` rejected (unlicensed dependency) | MIT |
+| PDF receipts/letters | browser print (Save as PDF); `pdf-lib` would bring `pako` (Zlib) | — |
 | Email sending | `nodemailer` | MIT-0 |
 | Security headers / rate limit | `helmet`, `express-rate-limit` | MIT |
 | Logging | `pino` | MIT |
@@ -133,14 +133,18 @@ and 1 test fails.
 - [x] **Also:** the sidebar links did a full page reload (now client-side), and on a phone there was no way to open the menu (now a menu button).
 - [ ] **Checkpoint, part 2:** import Pilzno's real data. The import is ready; it needs the files from Pilzno's current records.
 
-## Phase 3 — Operational features (Stage 3)
+## Phase 3 — Operational features (Stage 3) — ✅ done 2026-10-20 (checkpoint: Pilzno to try it)
 
-1. [ ] Donation receipts and year-end statements as PDFs (`pdf-lib`), with the logo and org details from Settings.
-2. [ ] Yahrzeit notices: a monthly list and printable letters ahead of each yahrzeit.
-3. [ ] Email templates with variables; sending through SMTP (`nodemailer`) set up in Settings.
-4. [ ] Reports, with CSV export.
-5. [ ] Events and RSVPs on the calendar.
-6. [ ] Later, optional: seats, aliyot/kibbudim, and dues schedules.
+1. [x] **Receipts and year-end statements** with the logo and org details (plus a tax/charity number and receipt footer in Settings). One family's statement, or every family that gave in a year, one per page.
+   - Built as print-ready pages (`/print/receipt/:id`, `/print/statement/:familyId`, `/print/statements`); the browser's Print → Save as PDF makes the PDF. Not `pdf-lib`: it needs `pako` (MIT AND **Zlib**, not on our list), and any server-made PDF with Hebrew names needs an embedded Hebrew font, and the free ones are SIL OFL (also not on our list). Both would be license-policy decisions; see "Open questions" below.
+2. [x] **Yahrzeit notices:** pick a month on the Important Dates page → print the list, print one letter per family, or email reminders. Dates now record who is remembered ("In memory of": name, Hebrew name, relationship); the panel warns when a yahrzeit doesn't say.
+3. [x] **Email:** SMTP settings in Settings → Email (password write-only), **test mode on by default** (messages are rendered and logged, never sent), test message, editable templates with `{{variables}}` (receipt, yahrzeit reminder, statement, event invitation), preview before sending, and an email log. `nodemailer` (MIT-0). Sending from a receipt, a statement, the yahrzeit panel, and an event.
+4. [x] **Reports** with CSV export: donations by fund and month, donors, pledge status, lapsed donors, directory, yahrzeits by month.
+5. [x] **Events and RSVPs:** events page, RSVPs per family (adults/children, capacity enforced), invitations by email, and events on the calendar. Switched off with the Events feature.
+6. [ ] Later, optional: seats, aliyot/kibbudim, and dues schedules. (Not started; dues would build on pledges.)
+- [ ] **Checkpoint:** Pilzno uses it for real on a local/office machine. Needs the Pilzno data import (Phase 2) and a real mail server (then turn test mode off).
+
+**Open questions (yours to decide):** server-made PDF attachments for emailed receipts would need `pako` (Zlib license) and an OFL-licensed Hebrew font approved; until then emails carry the receipt in the message body.
 
 ## Phase 4 — Hardening (core)
 

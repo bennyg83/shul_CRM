@@ -123,9 +123,19 @@ Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6
   `/api/export/:entity?format=csv|xlsx`.
 - **Tests**: 63 (recurrence, calendar, import/export, settings).
 
+## Phase 3 — Operations (2026-10-20)
+
+- **Documents** (`apps/api/src/documents.ts`, web `features/print`): receipts, statements, yahrzeit letters and lists as
+  printable pages under `/print/*` (outside the app layout). Yahrzeit letters use the "yahrzeit" email template.
+- **Email** (`apps/api/src/email.ts`, Settings → Email): nodemailer; test mode (JSON transport, nothing leaves the machine)
+  is the default; templates with `{{variables}}`; `emailLog` table. Send dialog: `features/email/SendEmailDialog.tsx`.
+- **Events** (`events.ts`, `/events`): events + RSVPs (migration 3), shown on the calendar.
+- **Reports** (`reports.ts`, `/reports`): six reports, JSON or CSV.
+- **Tests**: 74.
+
 ## Not yet done
 
-See `ROADMAP.md`. Next: Phase 3 (receipts, yahrzeit notices, email, reports, events).
+See `ROADMAP.md`. Next: Phase 4 (hardening: pagination/search, API tests + CI, backups, logging).
 
 ## Commands
 

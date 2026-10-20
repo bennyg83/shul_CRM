@@ -30,12 +30,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { Family, FamilyInput } from '@shulcrm/shared';
-import {
-  createFamily,
-  deleteFamily,
-  listFamilies,
-  updateFamily,
-} from '@/features/core/service';
+import { createFamily, deleteFamily, listFamilies, updateFamily } from '@/features/core/service';
 import { FamilyDetailModal } from './FamilyDetailModal';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useSettings } from '@/features/settings/useSettings';
@@ -74,7 +69,12 @@ export function FamiliesPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<Family | null>(null);
 
-  const { data: families, isLoading, isError, error } = useQuery({
+  const {
+    data: families,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: ['families'],
     queryFn: listFamilies,
   });
@@ -181,7 +181,9 @@ export function FamiliesPage() {
         placeholder={`Search ${t('families').toLowerCase()}…`}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} /> }}
+        InputProps={{
+          startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />,
+        }}
         sx={{ mb: 2, maxWidth: 360 }}
       />
 

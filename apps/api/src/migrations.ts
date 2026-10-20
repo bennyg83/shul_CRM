@@ -287,9 +287,59 @@ function settingsAndFiles(db: DatabaseSync): void {
   `);
 }
 
+/** 3 — Events with RSVPs, an email log, and who a date is for (the person a yahrzeit remembers). */
+function eventsAndEmail(db: DatabaseSync): void {
+  db.exec(`
+    ALTER TABLE importantDates ADD COLUMN personName TEXT;
+    ALTER TABLE importantDates ADD COLUMN personHebrewName TEXT;
+    ALTER TABLE importantDates ADD COLUMN relationship TEXT;
+
+    CREATE TABLE events (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      date TEXT NOT NULL,
+      startTime TEXT,
+      endTime TEXT,
+      location TEXT,
+      description TEXT,
+      capacity INTEGER CHECK (capacity IS NULL OR capacity >= 0),
+      rsvpOpen INTEGER,
+      createdAt TEXT NOT NULL
+    );
+    CREATE INDEX idx_events_date ON events(date);
+
+    CREATE TABLE rsvps (
+      id TEXT PRIMARY KEY,
+      eventId TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      familyId TEXT NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+      status TEXT NOT NULL,
+      adults INTEGER NOT NULL DEFAULT 0 CHECK (adults >= 0),
+      children INTEGER NOT NULL DEFAULT 0 CHECK (children >= 0),
+      note TEXT,
+      createdAt TEXT NOT NULL,
+      UNIQUE (eventId, familyId)
+    );
+    CREATE INDEX idx_rsvps_event ON rsvps(eventId);
+
+    CREATE TABLE emailLog (
+      id TEXT PRIMARY KEY,
+      toAddress TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      template TEXT,
+      familyId TEXT REFERENCES families(id) ON DELETE SET NULL,
+      status TEXT NOT NULL,
+      error TEXT,
+      testMode INTEGER NOT NULL DEFAULT 0,
+      sentAt TEXT NOT NULL
+    );
+    CREATE INDEX idx_email_family ON emailLog(familyId);
+  `);
+}
+
 const MIGRATIONS: Migration[] = [
   { version: 1, name: 'baseline', ownTransactions: true, up: baseline },
   { version: 2, name: 'settings and files', foreignKeysOff: true, up: settingsAndFiles },
+  { version: 3, name: 'events, RSVPs, email log', up: eventsAndEmail },
 ];
 
 /** The schema version this code expects. */

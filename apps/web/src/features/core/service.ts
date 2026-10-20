@@ -16,6 +16,23 @@ import type {
   PledgeInput,
   UpcomingDate,
   Features,
+  EmailLogEntry,
+  EmailSettings,
+  EmailSettingsView,
+  EmailTemplate,
+  EventDetail,
+  EventInput,
+  EventSummary,
+  ReceiptData,
+  ReportKey,
+  ReportTable,
+  Rsvp,
+  RsvpInput,
+  SendEmailRequest,
+  SendEmailResult,
+  ShulEvent,
+  StatementData,
+  YahrzeitNotice,
   ImportEntity,
   ImportPreview,
   ImportRequest,
@@ -327,3 +344,64 @@ export function commitImport(entity: ImportEntity, req: ImportRequest): Promise<
 }
 
 export const exportUrl = (entity: ImportEntity, format: 'csv' | 'xlsx') => `${API}/export/${entity}?format=${format}`;
+
+// ---------------------------------------------------------------------------
+// Events and RSVPs
+// ---------------------------------------------------------------------------
+
+export function listEventSummaries(from?: string, to?: string): Promise<EventSummary[]> {
+  const q = new URLSearchParams();
+  if (from) q.set('from', from);
+  if (to) q.set('to', to);
+  return request(`/events/summary${q.size ? `?${q}` : ''}`);
+}
+
+export function getEventDetail(id: string): Promise<EventDetail> {
+  return request(`/events/${id}/detail`);
+}
+
+export function createEvent(input: EventInput): Promise<ShulEvent> {
+  return request('/events', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateEvent(id: string, input: Partial<EventInput>): Promise<ShulEvent> {
+  return request(`/events/${id}`, { method: 'PATCH', body: patchBody(input) });
+}
+
+export function deleteEvent(id: string): Promise<void> {
+  return request(`/events/${id}`, { method: 'DELETE' });
+}
+
+export function saveRsvp(input: RsvpInput): Promise<Rsvp> {
+  return request('/rsvps', { method: 'PUT', body: JSON.stringify(input) });
+}
+
+export function deleteRsvp(id: string): Promise<void> {
+  return request(`/rsvps/${id}`, { method: 'DELETE' });
+}
+
+// ---------------------------------------------------------------------------
+// Documents (printed from /print/*), email, reports
+// ---------------------------------------------------------------------------
+
+export const getReceipt = (donationId: string) => request<ReceiptData>(`/documents/receipt/${donationId}`);
+export const getStatement = (familyId: string, year: number) =>
+  request<StatementData>(`/documents/statement/${familyId}?year=${year}`);
+export const getStatements = (year: number) => request<StatementData[]>(`/documents/statements?year=${year}`);
+export const getYahrzeitNotices = (from: string, to: string) =>
+  request<YahrzeitNotice[]>(`/documents/yahrzeits?from=${from}&to=${to}`);
+
+export const getEmailSettings = () => request<EmailSettingsView>('/email/settings');
+export const saveEmailSettings = (input: EmailSettings & { clearPassword?: boolean }) =>
+  request<EmailSettingsView>('/email/settings', { method: 'PUT', body: JSON.stringify(input) });
+export const getEmailTemplates = () => request<EmailTemplate[]>('/email/templates');
+export const saveEmailTemplates = (templates: EmailTemplate[]) =>
+  request<EmailTemplate[]>('/email/templates', { method: 'PUT', body: JSON.stringify(templates) });
+export const sendEmails = (req: SendEmailRequest) =>
+  request<SendEmailResult>('/email/send', { method: 'POST', body: JSON.stringify(req) });
+export const sendTestEmail = (to: string) =>
+  request<{ ok: true; testMode: boolean }>('/email/test', { method: 'POST', body: JSON.stringify({ to }) });
+export const getEmailLog = () => request<EmailLogEntry[]>('/email/log');
+
+export const getReport = (key: ReportKey, year: number) => request<ReportTable>(`/reports/${key}?year=${year}`);
+export const reportCsvUrl = (key: ReportKey, year: number) => `${API}/reports/${key}?year=${year}&format=csv`;

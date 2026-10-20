@@ -47,6 +47,7 @@ import {
 import { Field } from '@/features/core/Field';
 import { MemberDetailModal } from '@/features/members/MemberDetailModal';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { ReceiptActions, StatementActions } from '@/features/email/DocumentActions';
 import { effectiveRecurBy } from '@shulcrm/shared';
 import { useSettings } from '@/features/settings/useSettings';
 
@@ -61,15 +62,18 @@ const PLEDGE_TYPE: Record<NonNullable<Pledge['type']>, string> = {
   one_time: 'One-time',
 };
 
-
-
 export function FamilyDetailModal({ familyId, open, onClose }: Props) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState(0);
   const settings = useSettings();
   const { t, money, label } = settings;
 
-  const { data: detail, isLoading, isError, error } = useQuery({
+  const {
+    data: detail,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: qk.familyDetail(familyId),
     queryFn: () => getFamilyDetail(familyId),
     enabled: open,
@@ -80,12 +84,23 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
 
   // Form dialog state
   const [familyDialog, setFamilyDialog] = useState(false);
-  const [memberDialog, setMemberDialog] = useState<{ open: boolean; initial?: Member }>({ open: false });
-  const [pledgeDialog, setPledgeDialog] = useState<{ open: boolean; initial?: Pledge }>({ open: false });
-  const [donationDialog, setDonationDialog] = useState<{ open: boolean; initial?: Donation }>({ open: false });
-  const [dateDialog, setDateDialog] = useState<{ open: boolean; initial?: ImportantDate }>({ open: false });
+  const [memberDialog, setMemberDialog] = useState<{ open: boolean; initial?: Member }>({
+    open: false,
+  });
+  const [pledgeDialog, setPledgeDialog] = useState<{ open: boolean; initial?: Pledge }>({
+    open: false,
+  });
+  const [donationDialog, setDonationDialog] = useState<{ open: boolean; initial?: Donation }>({
+    open: false,
+  });
+  const [dateDialog, setDateDialog] = useState<{ open: boolean; initial?: ImportantDate }>({
+    open: false,
+  });
   const [noteDialog, setNoteDialog] = useState<{ open: boolean; initial?: Note }>({ open: false });
-  const [pendingDelete, setPendingDelete] = useState<{ fn: () => Promise<unknown>; label: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{
+    fn: () => Promise<unknown>;
+    label: string;
+  } | null>(null);
 
   const family = detail?.family;
 
@@ -140,7 +155,10 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
               <Tab label="Overview" />
               <Tab label={`${t('members')} (${members.length})`} />
               {/* Hidden, not removed, when pledges are off: the tabs are addressed by index. */}
-              <Tab label={`${t('pledges')} (${pledges.length})`} sx={settings.features.pledges ? undefined : { display: 'none' }} />
+              <Tab
+                label={`${t('pledges')} (${pledges.length})`}
+                sx={settings.features.pledges ? undefined : { display: 'none' }}
+              />
               <Tab label={`${t('donations')} (${donations.length})`} />
               <Tab label={`Dates (${dates.length})`} />
               <Tab label={`Notes (${notes.length})`} />
@@ -177,9 +195,18 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
                     )}
                   </Stack>
                 </Paper>
-                <Stack direction="row" justifyContent="flex-end">
-                  <Button variant="outlined" startIcon={<EditIcon />} onClick={() => setFamilyDialog(true)}>
-                    Edit family
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  justifyContent="space-between"
+                  spacing={1}
+                >
+                  <StatementActions familyId={familyId} />
+                  <Button
+                    variant="outlined"
+                    startIcon={<EditIcon />}
+                    onClick={() => setFamilyDialog(true)}
+                  >
+                    {`Edit ${t('family').toLowerCase()}`}
                   </Button>
                 </Stack>
               </Stack>
@@ -189,7 +216,11 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
             {tab === 1 && (
               <Stack spacing={2}>
                 <Stack direction="row" justifyContent="flex-end">
-                  <Button variant="contained" startIcon={<AddIcon />} onClick={() => setMemberDialog({ open: true })}>
+                  <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => setMemberDialog({ open: true })}
+                  >
                     {`Add ${t('member').toLowerCase()}`}
                   </Button>
                 </Stack>
@@ -213,7 +244,12 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
                       </TableHead>
                       <TableBody>
                         {members.map((m) => (
-                          <TableRow key={m.id} hover sx={{ cursor: 'pointer' }} onClick={() => setMemberModalId(m.id)}>
+                          <TableRow
+                            key={m.id}
+                            hover
+                            sx={{ cursor: 'pointer' }}
+                            onClick={() => setMemberModalId(m.id)}
+                          >
                             <TableCell>{m.firstName}</TableCell>
                             <TableCell>{m.lastName}</TableCell>
                             <TableCell>{m.hebrewName ?? '—'}</TableCell>
@@ -255,7 +291,11 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
             {tab === 2 && (
               <Stack spacing={2}>
                 <Stack direction="row" justifyContent="flex-end">
-                  <Button variant="contained" startIcon={<AddIcon />} onClick={() => setPledgeDialog({ open: true })}>
+                  <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => setPledgeDialog({ open: true })}
+                  >
                     {`Add ${t('pledge').toLowerCase()}`}
                   </Button>
                 </Stack>
@@ -347,6 +387,7 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
                             <TableCell>{label('paymentMethods', d.method)}</TableCell>
                             <TableCell>{d.note ?? '—'}</TableCell>
                             <TableCell align="right">
+                              <ReceiptActions donation={d} />
                               <IconButton
                                 size="small"
                                 aria-label="Edit donation"
@@ -357,7 +398,9 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
                               <IconButton
                                 size="small"
                                 aria-label="Delete donation"
-                                onClick={() => confirmDelete(() => deleteDonation(d.id), 'donation')}
+                                onClick={() =>
+                                  confirmDelete(() => deleteDonation(d.id), 'donation')
+                                }
                               >
                                 <DeleteIcon fontSize="small" />
                               </IconButton>
@@ -375,7 +418,11 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
             {tab === 4 && (
               <Stack spacing={2}>
                 <Stack direction="row" justifyContent="flex-end">
-                  <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDateDialog({ open: true })}>
+                  <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => setDateDialog({ open: true })}
+                  >
                     Add date
                   </Button>
                 </Stack>
@@ -402,8 +449,18 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
                             <TableCell>{settings.dateType(d.type).label}</TableCell>
                             <TableCell>{memberNames.get(d.memberId) ?? d.memberId}</TableCell>
                             <TableCell>{d.date}</TableCell>
-                            <TableCell>{d.hebrewDay && d.hebrewMonth && d.hebrewYear ? formatHebrew(d.hebrewDay, d.hebrewMonth, d.hebrewYear) : '—'}</TableCell>
-                            <TableCell>{d.recurring ? (effectiveRecurBy(d, settings.recurrence) === 'hebrew' ? 'Hebrew date' : 'English date') : '—'}</TableCell>
+                            <TableCell>
+                              {d.hebrewDay && d.hebrewMonth && d.hebrewYear
+                                ? formatHebrew(d.hebrewDay, d.hebrewMonth, d.hebrewYear)
+                                : '—'}
+                            </TableCell>
+                            <TableCell>
+                              {d.recurring
+                                ? effectiveRecurBy(d, settings.recurrence) === 'hebrew'
+                                  ? 'Hebrew date'
+                                  : 'English date'
+                                : '—'}
+                            </TableCell>
                             <TableCell align="right">
                               <IconButton
                                 size="small"
@@ -415,7 +472,9 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
                               <IconButton
                                 size="small"
                                 aria-label="Delete date"
-                                onClick={() => confirmDelete(() => deleteImportantDate(d.id), 'date')}
+                                onClick={() =>
+                                  confirmDelete(() => deleteImportantDate(d.id), 'date')
+                                }
                               >
                                 <DeleteIcon fontSize="small" />
                               </IconButton>
@@ -433,7 +492,11 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
             {tab === 5 && (
               <Stack spacing={2}>
                 <Stack direction="row" justifyContent="flex-end">
-                  <Button variant="contained" startIcon={<AddIcon />} onClick={() => setNoteDialog({ open: true })}>
+                  <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => setNoteDialog({ open: true })}
+                  >
                     Add note
                   </Button>
                 </Stack>
@@ -467,7 +530,11 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
                             </IconButton>
                           </Stack>
                         </Stack>
-                        {n.subject && <Typography variant="body2" color="text.secondary">{n.subject}</Typography>}
+                        {n.subject && (
+                          <Typography variant="body2" color="text.secondary">
+                            {n.subject}
+                          </Typography>
+                        )}
                         <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
                           {n.body}
                         </Typography>
@@ -490,7 +557,12 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
       </DialogActions>
 
       {/* Form dialogs */}
-      <FamilyFormDialog open={familyDialog} onClose={() => setFamilyDialog(false)} onSaved={onSaved} initial={family} />
+      <FamilyFormDialog
+        open={familyDialog}
+        onClose={() => setFamilyDialog(false)}
+        onSaved={onSaved}
+        initial={family}
+      />
       <MemberFormDialog
         open={memberDialog.open}
         onClose={() => setMemberDialog({ open: false })}
@@ -531,7 +603,11 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
 
       {/* Nested member detail modal */}
       {memberModalId && (
-        <MemberDetailModal memberId={memberModalId} open={Boolean(memberModalId)} onClose={() => setMemberModalId(null)} />
+        <MemberDetailModal
+          memberId={memberModalId}
+          open={Boolean(memberModalId)}
+          onClose={() => setMemberModalId(null)}
+        />
       )}
 
       <ConfirmDialog

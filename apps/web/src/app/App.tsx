@@ -28,6 +28,27 @@ const CalendarPage = lazy(() =>
 const UpcomingDatesPage = lazy(() =>
   import('@/features/dates/UpcomingDatesPage').then((m) => ({ default: m.UpcomingDatesPage })),
 );
+const EventsPage = lazy(() =>
+  import('@/features/events/EventsPage').then((m) => ({ default: m.EventsPage })),
+);
+const ReportsPage = lazy(() =>
+  import('@/features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })),
+);
+
+// Printable documents, without the app's sidebar (Print → Save as PDF).
+const print = (
+  name:
+    | 'ReceiptPrint'
+    | 'StatementPrint'
+    | 'StatementsPrint'
+    | 'YahrzeitLettersPrint'
+    | 'YahrzeitListPrint',
+) => lazy(() => import('@/features/print/PrintPages').then((m) => ({ default: m[name] })));
+const ReceiptPrint = print('ReceiptPrint');
+const StatementPrint = print('StatementPrint');
+const StatementsPrint = print('StatementsPrint');
+const YahrzeitLettersPrint = print('YahrzeitLettersPrint');
+const YahrzeitListPrint = print('YahrzeitListPrint');
 
 function RouteFallback() {
   return (
@@ -39,7 +60,7 @@ function RouteFallback() {
   );
 }
 
-export function App() {
+function MainRoutes() {
   return (
     <AppShell>
       <Suspense fallback={<RouteFallback />}>
@@ -50,10 +71,27 @@ export function App() {
           <Route path="/pledges" element={<PledgesDonationsPage />} />
           <Route path="/dates" element={<UpcomingDatesPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
+          <Route path="/events" element={<EventsPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
     </AppShell>
+  );
+}
+
+export function App() {
+  return (
+    <Suspense fallback={<RouteFallback />}>
+      <Routes>
+        <Route path="/print/receipt/:donationId" element={<ReceiptPrint />} />
+        <Route path="/print/statement/:familyId" element={<StatementPrint />} />
+        <Route path="/print/statements" element={<StatementsPrint />} />
+        <Route path="/print/yahrzeit-letters" element={<YahrzeitLettersPrint />} />
+        <Route path="/print/yahrzeit-list" element={<YahrzeitListPrint />} />
+        <Route path="*" element={<MainRoutes />} />
+      </Routes>
+    </Suspense>
   );
 }

@@ -44,6 +44,9 @@ const formSchema = z.object({
   recurring: z.boolean(),
   recurBy: z.enum(RECUR_BY),
   note: z.string().optional().or(z.literal('')),
+  personName: z.string().optional(),
+  personHebrewName: z.string().optional(),
+  relationship: z.string().optional(),
 });
 
 /** The nightfall answer is required only while the Hebrew calendar is switched on. */
@@ -65,6 +68,9 @@ const emptyForm = (memberId: string): FormValues => ({
   recurring: false,
   recurBy: 'gregorian',
   note: '',
+  personName: '',
+  personHebrewName: '',
+  relationship: '',
 });
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -155,6 +161,9 @@ export function ImportantDateFormDialog({
         recurring: initial.recurring ?? false,
         recurBy: initial.recurBy ?? settings.dateType(initial.type).recurBy,
         note: initial.note ?? '',
+        personName: initial.personName ?? '',
+        personHebrewName: initial.personHebrewName ?? '',
+        relationship: initial.relationship ?? '',
       });
     }
     // settings.dateType only matters for the initial value; don't reset the form when settings refetch.
@@ -238,6 +247,9 @@ export function ImportantDateFormDialog({
       recurring: values.recurring,
       recurBy: values.recurBy,
       note: values.note?.trim() || undefined,
+      personName: values.personName?.trim() || undefined,
+      personHebrewName: values.personHebrewName?.trim() || undefined,
+      relationship: values.relationship?.trim() || undefined,
     };
     mutation.mutate(input);
   });
@@ -368,6 +380,30 @@ export function ImportantDateFormDialog({
                 </FormControl>
               )}
             </Stack>
+            {settings.dateType(typeValue).rules === 'yahrzeit' && (
+              <Stack spacing={1}>
+                <Typography variant="subtitle2">In memory of</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Leave empty if this is the member&apos;s own yahrzeit. Used in yahrzeit letters
+                  and lists.
+                </Typography>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                  <TextField label="Name" sx={{ flexGrow: 1 }} {...register('personName')} />
+                  <TextField
+                    label="Hebrew name"
+                    sx={{ flexGrow: 1 }}
+                    inputProps={{ dir: 'auto' }}
+                    {...register('personHebrewName')}
+                  />
+                  <TextField
+                    label="Relationship"
+                    placeholder="Father"
+                    sx={{ width: { sm: 160 } }}
+                    {...register('relationship')}
+                  />
+                </Stack>
+              </Stack>
+            )}
             <TextField label="Note" multiline minRows={2} {...register('note')} />
             {mutation.isError && (
               <Alert severity="error">{(mutation.error as Error).message}</Alert>

@@ -39,7 +39,6 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { effectiveRecurBy } from '@shulcrm/shared';
 import { useSettings } from '@/features/settings/useSettings';
 
-
 interface Props {
   memberId: string;
   open: boolean;
@@ -51,16 +50,26 @@ export function MemberDetailModal({ memberId, open, onClose }: Props) {
   const [tab, setTab] = useState(0);
   const settings = useSettings();
 
-  const { data: detail, isLoading, isError, error } = useQuery({
+  const {
+    data: detail,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: qk.memberDetail(memberId),
     queryFn: () => getMemberDetail(memberId),
     enabled: open,
   });
 
   const [memberDialog, setMemberDialog] = useState(false);
-  const [dateDialog, setDateDialog] = useState<{ open: boolean; initial?: ImportantDate }>({ open: false });
+  const [dateDialog, setDateDialog] = useState<{ open: boolean; initial?: ImportantDate }>({
+    open: false,
+  });
   const [noteDialog, setNoteDialog] = useState<{ open: boolean; initial?: Note }>({ open: false });
-  const [pendingDelete, setPendingDelete] = useState<{ fn: () => Promise<unknown>; label: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{
+    fn: () => Promise<unknown>;
+    label: string;
+  } | null>(null);
 
   const member = detail?.member;
 
@@ -85,9 +94,7 @@ export function MemberDetailModal({ memberId, open, onClose }: Props) {
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>
-        {member ? `${member.firstName} ${member.lastName}` : 'Member'}
-      </DialogTitle>
+      <DialogTitle>{member ? `${member.firstName} ${member.lastName}` : 'Member'}</DialogTitle>
       <DialogContent dividers>
         {isLoading && (
           <Stack alignItems="center" sx={{ py: 6 }}>
@@ -143,7 +150,11 @@ export function MemberDetailModal({ memberId, open, onClose }: Props) {
                   </Stack>
                 </Paper>
                 <Stack direction="row" justifyContent="flex-end">
-                  <Button variant="outlined" startIcon={<EditIcon />} onClick={() => setMemberDialog(true)}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<EditIcon />}
+                    onClick={() => setMemberDialog(true)}
+                  >
                     Edit member
                   </Button>
                 </Stack>
@@ -182,8 +193,18 @@ export function MemberDetailModal({ memberId, open, onClose }: Props) {
                           <TableRow key={d.id} hover>
                             <TableCell>{settings.dateType(d.type).label}</TableCell>
                             <TableCell>{d.date}</TableCell>
-                            <TableCell>{d.hebrewDay && d.hebrewMonth && d.hebrewYear ? formatHebrew(d.hebrewDay, d.hebrewMonth, d.hebrewYear) : '—'}</TableCell>
-                            <TableCell>{d.recurring ? (effectiveRecurBy(d, settings.recurrence) === 'hebrew' ? 'Hebrew date' : 'English date') : '—'}</TableCell>
+                            <TableCell>
+                              {d.hebrewDay && d.hebrewMonth && d.hebrewYear
+                                ? formatHebrew(d.hebrewDay, d.hebrewMonth, d.hebrewYear)
+                                : '—'}
+                            </TableCell>
+                            <TableCell>
+                              {d.recurring
+                                ? effectiveRecurBy(d, settings.recurrence) === 'hebrew'
+                                  ? 'Hebrew date'
+                                  : 'English date'
+                                : '—'}
+                            </TableCell>
                             <TableCell align="right">
                               <IconButton
                                 size="small"
@@ -195,7 +216,9 @@ export function MemberDetailModal({ memberId, open, onClose }: Props) {
                               <IconButton
                                 size="small"
                                 aria-label="Delete date"
-                                onClick={() => confirmDelete(() => deleteImportantDate(d.id), 'date')}
+                                onClick={() =>
+                                  confirmDelete(() => deleteImportantDate(d.id), 'date')
+                                }
                               >
                                 <DeleteIcon fontSize="small" />
                               </IconButton>
@@ -212,7 +235,11 @@ export function MemberDetailModal({ memberId, open, onClose }: Props) {
             {tab === 2 && (
               <Stack spacing={2}>
                 <Stack direction="row" justifyContent="flex-end">
-                  <Button variant="contained" startIcon={<AddIcon />} onClick={() => setNoteDialog({ open: true })}>
+                  <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => setNoteDialog({ open: true })}
+                  >
                     Add note
                   </Button>
                 </Stack>
@@ -230,7 +257,11 @@ export function MemberDetailModal({ memberId, open, onClose }: Props) {
                             {n.priority ? ` · ${n.priority} priority` : ''}
                           </Typography>
                           <Stack direction="row">
-                            <IconButton size="small" aria-label="Edit note" onClick={() => setNoteDialog({ open: true, initial: n })}>
+                            <IconButton
+                              size="small"
+                              aria-label="Edit note"
+                              onClick={() => setNoteDialog({ open: true, initial: n })}
+                            >
                               <EditIcon fontSize="small" />
                             </IconButton>
                             <IconButton
@@ -242,7 +273,11 @@ export function MemberDetailModal({ memberId, open, onClose }: Props) {
                             </IconButton>
                           </Stack>
                         </Stack>
-                        {n.subject && <Typography variant="body2" color="text.secondary">{n.subject}</Typography>}
+                        {n.subject && (
+                          <Typography variant="body2" color="text.secondary">
+                            {n.subject}
+                          </Typography>
+                        )}
                         <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
                           {n.body}
                         </Typography>

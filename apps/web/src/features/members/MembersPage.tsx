@@ -82,7 +82,12 @@ export function MembersPage() {
   const [editing, setEditing] = useState<Member | null>(null);
   const [toDelete, setToDelete] = useState<Member | null>(null);
 
-  const { data: members, isLoading, isError, error } = useQuery({
+  const {
+    data: members,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: ['members'],
     queryFn: listMembers,
   });
@@ -192,7 +197,12 @@ export function MembersPage() {
             Member profiles and their family links.
           </Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate} disabled={!families?.length}>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={openCreate}
+          disabled={!families?.length}
+        >
           {`New ${t('member')}`}
         </Button>
       </Stack>
@@ -203,7 +213,9 @@ export function MembersPage() {
           placeholder={`Search ${t('members').toLowerCase()}…`}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} /> }}
+          InputProps={{
+            startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />,
+          }}
           sx={{ maxWidth: 320 }}
         />
         <FormControl size="small" sx={{ minWidth: 180 }}>

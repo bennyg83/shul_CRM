@@ -19,6 +19,7 @@ export class NotFound extends Error {
 // SQLite has no boolean type: boolean columns round-trip as 0/1, so map them back to booleans.
 const BOOLEAN_COLUMNS: Record<string, readonly string[]> = {
   importantDates: ['recurring', 'afterNightfall'],
+  events: ['rsvpOpen'],
 };
 
 function clean<T>(table: string, row: Row): T {

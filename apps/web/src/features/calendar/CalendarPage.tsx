@@ -1,5 +1,14 @@
 import { useMemo, useState } from 'react';
-import { Box, Card, CardContent, CircularProgress, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import {
+  Box,
+  Card,
+  CardContent,
+  CircularProgress,
+  IconButton,
+  Stack,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useQuery } from '@tanstack/react-query';
@@ -7,16 +16,28 @@ import {
   formatHebrew,
   gregorianToHebrew,
   hebrewMonthName,
+  type EventSummary,
   type UpcomingDate,
 } from '@shulcrm/shared';
-import { listDateOccurrences } from '@/features/core/service';
+import { listDateOccurrences, listEventSummaries } from '@/features/core/service';
+import { useNavigate } from 'react-router-dom';
 import { qk } from '@/features/core/queryKeys';
 import { MemberDetailModal } from '@/features/members/MemberDetailModal';
 import { useSettings } from '@/features/settings/useSettings';
 
 const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ] as const;
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
@@ -48,9 +69,23 @@ export function CalendarPage() {
     queryFn: () => listDateOccurrences(from, to),
   });
 
+  // Events show on the calendar too (when the events module is on).
+  const navigate = useNavigate();
+  const { data: monthEvents } = useQuery({
+    queryKey: ['events', 'summary', from, to],
+    queryFn: () => listEventSummaries(from, to),
+    enabled: settings.features.events,
+  });
+  const eventsByDay = useMemo(() => {
+    const map = new Map<string, EventSummary[]>();
+    for (const e of monthEvents ?? []) map.set(e.date, [...(map.get(e.date) ?? []), e]);
+    return map;
+  }, [monthEvents]);
+
   const byDay = useMemo(() => {
     const map = new Map<string, UpcomingDate[]>();
-    for (const o of data ?? []) map.set(o.nextOccurrence, [...(map.get(o.nextOccurrence) ?? []), o]);
+    for (const o of data ?? [])
+      map.set(o.nextOccurrence, [...(map.get(o.nextOccurrence) ?? []), o]);
     return map;
   }, [data]);
 
@@ -58,8 +93,13 @@ export function CalendarPage() {
   const hebrewSpan = useMemo(() => {
     const a = gregorianToHebrew(from);
     const b = gregorianToHebrew(to);
-    const left = a.year === b.year ? hebrewMonthName(a.month, a.year) : `${hebrewMonthName(a.month, a.year)} ${a.year}`;
-    return a.month === b.month ? `${left} ${b.year}` : `${left} – ${hebrewMonthName(b.month, b.year)} ${b.year}`;
+    const left =
+      a.year === b.year
+        ? hebrewMonthName(a.month, a.year)
+        : `${hebrewMonthName(a.month, a.year)} ${a.year}`;
+    return a.month === b.month
+      ? `${left} ${b.year}`
+      : `${left} – ${hebrewMonthName(b.month, b.year)} ${b.year}`;
   }, [from, to]);
 
   const shift = (delta: number) =>
@@ -122,6 +162,7 @@ export function CalendarPage() {
               const dayIso = iso(year, month, day);
               const hebrew = gregorianToHebrew(dayIso);
               const items = byDay.get(dayIso) ?? [];
+              const dayEvents = eventsByDay.get(dayIso) ?? [];
               return (
                 <Box
                   key={dayIso}
@@ -131,7 +172,7 @@ export function CalendarPage() {
                     borderColor: dayIso === todayIso ? 'primary.main' : 'divider',
                     borderRadius: 1,
                     p: 0.5,
-                    bgcolor: items.length > 0 ? 'action.hover' : undefined,
+                    bgcolor: items.length + dayEvents.length > 0 ? 'action.hover' : undefined,
                     overflow: 'hidden',
                   }}
                 >
@@ -139,10 +180,49 @@ export function CalendarPage() {
                     <Typography variant="body2" fontWeight={dayIso === todayIso ? 700 : 400}>
                       {day}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary" title={formatHebrew(hebrew.day, hebrew.month, hebrew.year)}>
-                      {hebrew.day === 1 ? `1 ${hebrewMonthName(hebrew.month, hebrew.year)}` : hebrew.day}
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      title={formatHebrew(hebrew.day, hebrew.month, hebrew.year)}
+                    >
+                      {hebrew.day === 1
+                        ? `1 ${hebrewMonthName(hebrew.month, hebrew.year)}`
+                        : hebrew.day}
                     </Typography>
                   </Stack>
+                  {dayEvents.map((e) => (
+                    <Tooltip
+                      key={e.id}
+                      title={`${e.title}${e.startTime ? `, ${e.startTime}` : ''}${e.location ? ` · ${e.location}` : ''} (${e.attending} coming)`}
+                    >
+                      <Box
+                        component="button"
+                        type="button"
+                        onClick={() => navigate('/events')}
+                        sx={{
+                          display: 'block',
+                          width: '100%',
+                          mt: 0.25,
+                          px: 0.5,
+                          border: 1,
+                          borderColor: 'primary.main',
+                          borderRadius: 0.5,
+                          bgcolor: 'background.paper',
+                          color: 'primary.main',
+                          font: 'inherit',
+                          fontSize: 11,
+                          lineHeight: 1.5,
+                          textAlign: 'left',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {e.title}
+                      </Box>
+                    </Tooltip>
+                  ))}
                   {items.map((o) => (
                     <Tooltip
                       key={`${o.id}-${o.nextOccurrence}`}

@@ -19,7 +19,7 @@ import { listUpcomingDates } from '@/features/core/service';
 import { formatHebrew, type UpcomingDate } from '@shulcrm/shared';
 import { qk } from '@/features/core/queryKeys';
 import { useSettings } from '@/features/settings/useSettings';
-
+import { YahrzeitNotices } from './YahrzeitNotices';
 
 const REPEATS: Record<UpcomingDate['recurBy'], string> = {
   hebrew: 'Yearly (Hebrew date)',
@@ -81,9 +81,11 @@ export function UpcomingDatesPage() {
       </Stack>
 
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Upcoming birthdays, yahrzeits, and b&apos;nai mitzvah across all families. Yahrzeits and other Hebrew dates fall on their Hebrew anniversary and begin the evening before.
+        Upcoming birthdays, yahrzeits, and b&apos;nai mitzvah across all families. Yahrzeits and
+        other Hebrew dates fall on their Hebrew anniversary and begin the evening before.
       </Typography>
 
+      {settings.features.yahrzeits && <YahrzeitNotices />}
       <Card>
         <CardContent>
           {isLoading && (
@@ -126,7 +128,11 @@ export function UpcomingDatesPage() {
                     <TableCell>{d.familyName}</TableCell>
                     <TableCell>{settings.dateType(d.type).label}</TableCell>
                     <TableCell>
-                      {formatHebrew(d.occurrenceHebrew.day, d.occurrenceHebrew.month, d.occurrenceHebrew.year)}
+                      {formatHebrew(
+                        d.occurrenceHebrew.day,
+                        d.occurrenceHebrew.month,
+                        d.occurrenceHebrew.year,
+                      )}
                     </TableCell>
                     <TableCell>{REPEATS[d.recurBy]}</TableCell>
                   </TableRow>

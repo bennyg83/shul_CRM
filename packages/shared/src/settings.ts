@@ -35,6 +35,10 @@ export const orgProfileSchema = z.object({
   secondaryColor: hexColor,
   /** Someone who died in Adar of a regular year: in a leap year, Adar I (default) or Adar II. */
   adarYahrzeit: z.enum(['adar1', 'adar2']),
+  /** Tax or charity registration number, printed on receipts (e.g. an EIN or charity number). */
+  taxId: z.string().optional(),
+  /** Printed at the foot of every receipt, e.g. "No goods or services were provided in return for this gift." */
+  receiptFooter: z.string().max(1000).optional(),
 });
 export type OrgProfile = z.infer<typeof orgProfileSchema>;
 

@@ -326,6 +326,19 @@ export function OrgSettings() {
                     />
                   </FormControl>
                 </Grid>
+                <Grid item xs={12} sm={4}>
+                  {text('taxId', 'Tax / charity number')}
+                </Grid>
+                <Grid item xs={12} sm={8}>
+                  <TextField
+                    label="Receipt footer"
+                    fullWidth
+                    multiline
+                    minRows={2}
+                    helperText='Printed on every receipt, e.g. "No goods or services were provided in return for this gift."'
+                    {...register('receiptFooter')}
+                  />
+                </Grid>
                 <Grid item xs={12}>
                   <Typography variant="caption" color="text.secondary">
                     Install id: {settings.org.orgId}
