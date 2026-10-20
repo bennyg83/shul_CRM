@@ -2,6 +2,7 @@
   "name": "pilzno-crm",
   "private": true,
   "version": "0.0.1",
+  "license": "UNLICENSED",
   "description": "Pilzno Synagogue CRM — monorepo (api + web + shared)",
   "type": "module",
   "workspaces": [
@@ -16,7 +17,8 @@
     "typecheck": "npm run typecheck -w @pilzno/api && npm run typecheck -w @pilzno/web",
     "lint": "npm run lint -w @pilzno/api && npm run lint -w @pilzno/web",
     "preview": "npm run preview -w @pilzno/web",
-    "start": "npm run start -w @pilzno/api"
+    "start": "npm run start -w @pilzno/api",
+    "license:check": "node scripts/license-check.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

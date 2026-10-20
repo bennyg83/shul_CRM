@@ -154,6 +154,9 @@ if (repo.families.list().length === 0) {
   console.log('[api] seeded demo data');
 }
 
-app.listen(PORT, () => {
-  console.log(`[api] listening on http://localhost:${PORT}`);
+// There is no login yet (ROADMAP Phase 5), so only this machine may connect.
+// Set HOST=0.0.0.0 to expose it on the network once auth exists.
+const HOST = process.env.HOST ?? '127.0.0.1';
+app.listen(PORT, HOST, () => {
+  console.log(`[api] listening on http://${HOST}:${PORT}`);
 });

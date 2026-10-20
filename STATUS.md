@@ -1,6 +1,6 @@
 # Pilzno Synagogue CRM — Task Status
 
-> Last updated: 2026-10-14
+> Last updated: 2026-10-20 · Plan: see `ROADMAP.md` (old plans in `docs/archive/`)
 > Working directory: `C:\Users\binya\Documents\CRM 3\CRM 3`
 > Build mode: **Mode C — Monorepo** (api + web + shared; real API over SQLite, web is a thin client)
 
@@ -67,7 +67,7 @@ pilzno-crm/
 Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6 Tishrei, 5787").
 
 - **Shared schema** (`@pilzno/shared`): `ImportantDate` / `ImportantDateInput` include optional `hebrewDay`, `hebrewMonth`, `hebrewYear`. The legacy free-text `hebrewDate` field was removed from the schema **and dropped as a SQLite column** (guarded `ALTER TABLE … DROP COLUMN` migration in `db.ts`; existing rows keep their `hebrewDay/Month/Year`).
-- **Converter** (`web/src/features/core/hebrewDate.ts`, via `@hebcal/core`): `gregorianToHebrew(iso)`, `hebrewToGregorianISO(d,m,y)`, `formatHebrew(d,m,y)`. Uses a local-noon reference so the result is deterministic across timezones; the value is computed at save time and stored — display reads the stored value, never recomputes live.
+- **Converter** (`@pilzno/shared/hebrewCalendar.ts`, our own code since Phase 0): `gregorianToHebrew(iso, { afterNightfall })`, `hebrewToGregorianISO(d,m,y)`, `formatHebrew(d,m,y)`. The value is computed at save time and stored; display reads the stored value and never recomputes live.
 - **Form** (`ImportantDateFormDialog`): auto-computes the Hebrew date from the Gregorian date (live preview) and stores it on save; the user can still override.
 - **Display**: `FamilyDetailModal` / `MemberDetailModal` render the Hebrew date in the Dates table via `formatHebrew()` (falls back to "—" when unset).
 
@@ -85,12 +85,26 @@ Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6
 - Deleted junk: `apps/api/src/probe.txt`, `apps/api/src/scratch.txt`, `apps/web/npm-install.log`
 - Dropped the dead `hebrewDate` column (superseded by `hebrewDay/Month/Year`)
 
+## Phase 0 — Clean base (2026-10-20)
+
+- **IDs are UUIDv7** everywhere (`newId()` in `@pilzno/shared/ids.ts`, no dependency). Schemas validate ids and
+  foreign keys as UUIDs. Seed uses fixed UUIDs (`00000000-0000-7000-8000-KKKK0000NNNN`). A one-time migration in
+  `db.ts` rewrites legacy prefixed ids (`fam-001`) and their foreign keys in one transaction.
+- **Own Hebrew calendar** (`@pilzno/shared/hebrewCalendar.ts`) replaces GPL `@hebcal/core`. Pure day arithmetic,
+  so no timezone drift. It matched hebcal on every day from 1900 to 2240 before hebcal was removed.
+- **Before/after nightfall**: important dates store `afterNightfall`; the form requires the answer and previews
+  the Hebrew date for each choice. After nightfall = next Hebrew day.
+- **Important-date types**: the old `CHECK` (birthday/yahrzeit/brit_mitzvah only) is gone, so bar/bat mitzvah,
+  anniversary and seuda hoda'a save. Types are validated by zod.
+- **Licenses**: `npm run license:check` fails on anything outside MIT/ISC/BSD/Apache-2.0/etc. (552 packages pass).
+  vitest pinned to 3.x to drop MPL `lightningcss`.
+- **Local-only**: the API binds to `127.0.0.1` (override with `HOST`) until login exists.
+- **Auth work** (login, RBAC, users, family portal) is parked on branch `wip/auth` until ROADMAP Phase 5.
+
 ## Not yet done
 
-- [ ] Auth: register/login/logout, session, workspace context
-- [ ] RBAC: owner/admin/member
-- [ ] Family duplicate detection (name/phone match)
-- [ ] Git: local repo initialized + `.gitignore` in place; **no commit yet** (no git identity / remote configured)
+See `ROADMAP.md`. Next: fix MUI selects that never show their value (all six forms), then Phase 1
+(Hebrew-date recurrence for yahrzeits).
 
 ## Commands
 
@@ -99,6 +113,7 @@ npm install                 # from repo root (workspaces)
 npm run dev                 # api (:3000) + web (:5173) together
 npm run dev:api | dev:web   # individually
 npm run typecheck | lint    # all workspaces
-npm test -w @pilzno/api     # Vitest suite (api data-access)
+npm test -w @pilzno/api     # Vitest suite (data access, Hebrew calendar, UUIDs)
+npm run license:check       # fail on any non-permissive dependency license
 npm run build               # api typecheck + web production build
 ```

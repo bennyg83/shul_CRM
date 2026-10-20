@@ -151,9 +151,9 @@ describe('repo: upcomingImportantDates', () => {
     // Recurring yahrzeit: this year's anniversary already passed -> rolls to next year (outside the window).
     const yahrzeit = importantDates.create({ memberId: member.id, type: 'yahrzeit', date: '2019-09-01', recurring: true });
     // One-time date in the past -> excluded.
-    const past = importantDates.create({ memberId: member.id, type: 'brit_mitzvah', date: '2023-01-18', recurring: false });
+    const past = importantDates.create({ memberId: member.id, type: 'bar_mitzvah', date: '2023-01-18', recurring: false });
     // One-time date ~27 days ahead -> included.
-    const future = importantDates.create({ memberId: member.id, type: 'brit_mitzvah', date: '2026-11-10', recurring: false });
+    const future = importantDates.create({ memberId: member.id, type: 'bar_mitzvah', date: '2026-11-10', recurring: false });
 
     const upcoming = upcomingImportantDates(90, today);
 

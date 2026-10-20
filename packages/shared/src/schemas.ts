@@ -1,11 +1,15 @@
 import { z } from 'zod';
+import { UUID_PATTERN } from './ids.ts';
+
+/** Record IDs and foreign keys are UUIDs (generated with newId() from ids.ts). */
+const uuid = () => z.string().regex(UUID_PATTERN, 'Must be a UUID');
 
 // ---------------------------------------------------------------------------
 // Core entity schemas (single source of truth for types + validation)
 // ---------------------------------------------------------------------------
 
 export const familySchema = z.object({
-  id: z.string(),
+  id: uuid(),
   name: z.string().min(1),
   hebrewName: z.string().optional(),
   address: z.string().optional(),
@@ -21,8 +25,8 @@ export const familySchema = z.object({
 });
 
 export const memberSchema = z.object({
-  id: z.string(),
-  familyId: z.string(),
+  id: uuid(),
+  familyId: uuid(),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   hebrewName: z.string().optional(),
@@ -58,10 +62,10 @@ export const formatMoney = (n: number, currency: Currency = 'USD') =>
   new Intl.NumberFormat(CURRENCY_LOCALE[currency], { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
 
 export const pledgeSchema = z.object({
-  id: z.string(),
+  id: uuid(),
   fund: z.string(),
   type: z.enum(['annual', 'one_time']).optional(),
-  familyId: z.string(),
+  familyId: uuid(),
   year: z.number().int(),
   dueDate: z.string().optional(),
   amount: z.number().nonnegative(),
@@ -70,10 +74,10 @@ export const pledgeSchema = z.object({
 });
 
 export const donationSchema = z.object({
-  id: z.string(),
+  id: uuid(),
   fund: z.string(),
-  familyId: z.string(),
-  pledgeId: z.string().optional(),
+  familyId: uuid(),
+  pledgeId: uuid().optional(),
   amount: z.number().nonnegative(),
   currency: currencySchema,
   date: z.string(),
@@ -83,11 +87,13 @@ export const donationSchema = z.object({
 });
 
 export const importantDateSchema = z.object({
-  id: z.string(),
-  memberId: z.string(),
+  id: uuid(),
+  memberId: uuid(),
   type: z.enum(["birthday", "yahrzeit", "bar_mitzvah", "bat_mitzvah", "anniversary", 'seuda_hoda\'a']),
   /** Gregorian ISO date of the original event (death date for yahrzeit). */
   date: z.string(),
+  /** The event happened after nightfall, so it belongs to the next Hebrew day. */
+  afterNightfall: z.boolean().optional(),
   hebrewDay: z.number().int().min(1).max(30).optional(),
   hebrewMonth: z.number().int().min(1).max(13).optional(),
   hebrewYear: z.number().int().min(1).optional(),
@@ -98,9 +104,9 @@ export const importantDateSchema = z.object({
 
 
 export const noteSchema = z.object({
-  id: z.string(),
-  familyId: z.string().optional(),
-  memberId: z.string().optional(),
+  id: uuid(),
+  familyId: uuid().optional(),
+  memberId: uuid().optional(),
   type: z
     .enum(['general', 'pastoral', 'membership', 'lifecycle', 'donation', 'other'])
     .optional(),

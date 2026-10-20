@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { isUuid, newId } from '@pilzno/shared';
 
 // ---------------------------------------------------------------------------
 // SQLite database (node:sqlite — zero native dependencies, file-backed)
@@ -82,8 +83,12 @@ CREATE TABLE IF NOT EXISTS donations (
 CREATE TABLE IF NOT EXISTS importantDates (
   id TEXT PRIMARY KEY,
   memberId TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('birthday', 'yahrzeit', 'brit_mitzvah')),
+  type TEXT NOT NULL,
   date TEXT NOT NULL,
+  afterNightfall INTEGER,
+  hebrewDay INTEGER,
+  hebrewMonth INTEGER,
+  hebrewYear INTEGER,
   recurring INTEGER,
   note TEXT
 );
@@ -152,3 +157,90 @@ ensureColumn('donations', 'currency', "TEXT NOT NULL DEFAULT 'USD'");
 
 // Remove the legacy free-text hebrewDate column (superseded by hebrewDay/Month/Year).
 dropColumnIfPresent('importantDates', 'hebrewDate');
+ensureColumn('importantDates', 'afterNightfall', 'INTEGER');
+
+// ---------------------------------------------------------------------------
+// Table rebuilds. SQLite cannot ALTER a CHECK constraint, so a table whose
+// definition changed is copied into a fresh one. Foreign keys are switched off
+// for the copy (PRAGMA foreign_keys has no effect inside a transaction).
+// ---------------------------------------------------------------------------
+function withForeignKeysOff(work: () => void): void {
+  db.exec('PRAGMA foreign_keys = OFF;');
+  try {
+    db.exec('BEGIN');
+    try {
+      work();
+      const broken = db.prepare('PRAGMA foreign_key_check').all();
+      if (broken.length > 0) throw new Error(`Migration left ${broken.length} broken foreign keys`);
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON;');
+  }
+}
+
+// importantDates.type used to be limited to ('birthday', 'yahrzeit', 'brit_mitzvah'), which
+// rejected bar/bat mitzvah, anniversary and seuda hoda'a. Types are validated in zod instead.
+const datesSql = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'importantDates'`).get() as
+  | { sql: string }
+  | undefined;
+if (datesSql?.sql.includes('CHECK')) {
+  withForeignKeysOff(() => {
+    db.exec(`
+      CREATE TABLE importantDates_new (
+        id TEXT PRIMARY KEY,
+        memberId TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        date TEXT NOT NULL,
+        afterNightfall INTEGER,
+        hebrewDay INTEGER,
+        hebrewMonth INTEGER,
+        hebrewYear INTEGER,
+        recurring INTEGER,
+        note TEXT
+      );
+      INSERT INTO importantDates_new (id, memberId, type, date, afterNightfall, hebrewDay, hebrewMonth, hebrewYear, recurring, note)
+        SELECT id, memberId, type, date, afterNightfall, hebrewDay, hebrewMonth, hebrewYear, recurring, note FROM importantDates;
+      DROP TABLE importantDates;
+      ALTER TABLE importantDates_new RENAME TO importantDates;
+      CREATE INDEX IF NOT EXISTS idx_dates_member ON importantDates(memberId);
+    `);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// One-time ID migration: older databases used prefixed ids ("fam-001",
+// "mem-lx3k…"). Every id and foreign key is rewritten to a UUIDv7 in one
+// transaction; rows that already have UUIDs are left alone.
+// ---------------------------------------------------------------------------
+const ID_TABLES = ['families', 'members', 'pledges', 'donations', 'importantDates', 'notes'] as const;
+const FOREIGN_KEYS: ReadonlyArray<readonly [table: string, column: string]> = [
+  ['members', 'familyId'],
+  ['pledges', 'familyId'],
+  ['donations', 'familyId'],
+  ['donations', 'pledgeId'],
+  ['importantDates', 'memberId'],
+  ['notes', 'familyId'],
+  ['notes', 'memberId'],
+];
+
+const legacyIds = new Map<string, string>();
+for (const table of ID_TABLES) {
+  for (const { id } of db.prepare(`SELECT id FROM ${table}`).all() as { id: string }[]) {
+    if (!isUuid(id)) legacyIds.set(id, newId());
+  }
+}
+if (legacyIds.size > 0) {
+  withForeignKeysOff(() => {
+    for (const [oldId, id] of legacyIds) {
+      for (const table of ID_TABLES) db.prepare(`UPDATE ${table} SET id = ? WHERE id = ?`).run(id, oldId);
+      for (const [table, column] of FOREIGN_KEYS) {
+        db.prepare(`UPDATE ${table} SET ${column} = ? WHERE ${column} = ?`).run(id, oldId);
+      }
+    }
+  });
+  console.log(`[db] migrated ${legacyIds.size} legacy ids to UUIDs`);
+}

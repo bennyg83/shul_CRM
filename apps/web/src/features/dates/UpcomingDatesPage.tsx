@@ -17,7 +17,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import type { ImportantDate } from '@pilzno/shared';
 import { listUpcomingDates } from '@/features/core/service';
-import { formatHebrew } from '@/features/core/hebrewDate';
+import { formatHebrew } from '@pilzno/shared';
 import { qk } from '@/features/core/queryKeys';
 
 const DATE_LABELS: Record<ImportantDate['type'], string> = {

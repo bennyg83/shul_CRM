@@ -11,23 +11,29 @@ import {
   FormControlLabel,
   FormLabel,
   MenuItem,
+  Radio,
+  RadioGroup,
   Select,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useForm, useWatch } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { formatHebrew, gregorianToHebrew } from '@pilzno/shared';
 import type { ImportantDate, ImportantDateInput, Member } from '@pilzno/shared';
 import { createImportantDate, listMembers, updateImportantDate } from '@/features/core/service';
-import { gregorianToHebrew, formatHebrew } from '@/features/core/hebrewDate';
 
 const formSchema = z.object({
   memberId: z.string().min(1, 'Member is required'),
   type: z.enum(['birthday', 'yahrzeit', 'bar_mitzvah', 'bat_mitzvah', 'anniversary', "seuda_hoda'a"]),
   date: z.string().min(1, 'Date is required'),
+  // The Hebrew day starts at nightfall, so one English date can be two Hebrew dates.
+  timeOfDay: z
+    .enum(['', 'day', 'night'])
+    .refine((v): boolean => v !== '', 'Choose whether this was before or after nightfall'),
   recurring: z.boolean().optional(),
   note: z.string().optional().or(z.literal('')),
 });
@@ -38,6 +44,7 @@ const emptyForm = (memberId: string): FormValues => ({
   memberId,
   type: 'birthday',
   date: '',
+  timeOfDay: '',
   recurring: false,
   note: '',
 });
@@ -77,6 +84,7 @@ export function ImportantDateFormDialog({ open, onClose, onSaved, initial, membe
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(formSchema) });
 
@@ -91,6 +99,8 @@ export function ImportantDateFormDialog({ open, onClose, onSaved, initial, membe
         memberId: initial.memberId,
         type: initial.type as FormValues['type'],
         date: initial.date,
+        // Older dates never recorded this; leave it unanswered so the user must choose.
+        timeOfDay: initial.afterNightfall === undefined ? '' : initial.afterNightfall ? 'night' : 'day',
         recurring: initial.recurring ?? false,
         note: initial.note ?? '',
       });
@@ -104,14 +114,18 @@ export function ImportantDateFormDialog({ open, onClose, onSaved, initial, membe
     if (member?.birthDate && dateValue === '') {
       const birthGender = member.gender === 'other' ? undefined : member.gender;
       const calculatedDate = calculateEventFromBirthdate(member.birthDate, birthGender);
-      reset({ ...emptyForm(memberValue), date: calculatedDate });
+      // Only fill the date: a full reset would also wipe the type and nightfall answers.
+      setValue('date', calculatedDate);
     }
-  }, [open, initial, memberValue]);
+  }, [open, initial, memberValue, dateValue, memberOptions, setValue]);
 
-  const hebrew =
-    dateValue && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)
-      ? gregorianToHebrew(dateValue)
-      : undefined;
+  // Show the Hebrew date each answer produces, so the choice is concrete.
+  const validDate = Boolean(dateValue) && /^\d{4}-\d{2}-\d{2}$/.test(dateValue);
+  const hebrewLabel = (afterNightfall: boolean) => {
+    if (!validDate) return '';
+    const h = gregorianToHebrew(dateValue, { afterNightfall });
+    return ` → ${formatHebrew(h.day, h.month, h.year)}`;
+  };
 
   const mutation = useMutation({
     mutationFn: (input: ImportantDateInput) =>
@@ -123,11 +137,15 @@ export function ImportantDateFormDialog({ open, onClose, onSaved, initial, membe
   });
 
   const onSubmit = handleSubmit((values) => {
-    const heb = /^\d{4}-\d{2}-\d{2}$/.test(values.date) ? gregorianToHebrew(values.date) : undefined;
+    const afterNightfall = values.timeOfDay === 'night';
+    const heb = /^\d{4}-\d{2}-\d{2}$/.test(values.date)
+      ? gregorianToHebrew(values.date, { afterNightfall })
+      : undefined;
     const input: ImportantDateInput = {
       memberId: values.memberId,
       type: values.type as ImportantDate['type'],
       date: values.date,
+      afterNightfall,
       hebrewDay: heb?.day,
       hebrewMonth: heb?.month,
       hebrewYear: heb?.year,
@@ -163,7 +181,7 @@ export function ImportantDateFormDialog({ open, onClose, onSaved, initial, membe
                 <MenuItem value="bar_mitzvah">Bar Mitzvah</MenuItem>
                 <MenuItem value="bat_mitzvah">Bat Mitzvah</MenuItem>
                 <MenuItem value="anniversary">Anniversary</MenuItem>
-                <MenuItem value="seuda_hoda'a">Seuda Hoda'a (Thanksgiving Meal)</MenuItem>
+                <MenuItem value="seuda_hoda'a">Seuda Hoda&apos;a (Thanksgiving Meal)</MenuItem>
               </Select>
             </FormControl>
             <Stack spacing={1}>
@@ -176,9 +194,32 @@ export function ImportantDateFormDialog({ open, onClose, onSaved, initial, membe
                 helperText={errors.date?.message}
                 {...register('date')}
               />
-              <Typography variant="body2" color="text.secondary">
-                Hebrew: {hebrew ? formatHebrew(hebrew.day, hebrew.month, hebrew.year) : '—'}
-              </Typography>
+              <FormControl error={Boolean(errors.timeOfDay)}>
+                <FormLabel>Was this before or after nightfall?</FormLabel>
+                <Controller
+                  name="timeOfDay"
+                  control={control}
+                  render={({ field }) => (
+                    <RadioGroup {...field}>
+                      <FormControlLabel
+                        value="day"
+                        control={<Radio size="small" />}
+                        label={`Before nightfall (daytime)${hebrewLabel(false)}`}
+                      />
+                      <FormControlLabel
+                        value="night"
+                        control={<Radio size="small" />}
+                        label={`After nightfall (evening)${hebrewLabel(true)}`}
+                      />
+                    </RadioGroup>
+                  )}
+                />
+                {errors.timeOfDay && (
+                  <Typography variant="caption" color="error">
+                    {errors.timeOfDay.message}
+                  </Typography>
+                )}
+              </FormControl>
             </Stack>
             <FormControlLabel
               control={<Checkbox {...register('recurring')} />}

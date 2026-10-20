@@ -15,12 +15,9 @@ export class NotFound extends Error {
   }
 }
 
-const uid = (prefix: string) =>
-  `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
-
 // SQLite has no boolean type: boolean columns round-trip as 0/1, so map them back to booleans.
 const BOOLEAN_COLUMNS: Record<string, readonly string[]> = {
-  importantDates: ['recurring'],
+  importantDates: ['recurring', 'afterNightfall'],
 };
 
 function clean<T>(table: string, row: Row): T {
@@ -95,7 +92,7 @@ import type {
   PledgeInput,
   UpcomingDate,
 } from '@pilzno/shared';
-import { CURRENCIES } from '@pilzno/shared';
+import { CURRENCIES, newId } from '@pilzno/shared';
 
 // ---------------------------------------------------------------------------
 // Entity repos (cascades handled by the DDL foreign keys in db.ts)
@@ -105,7 +102,7 @@ export const families = {
   list: () => list<Family>('families', 'name COLLATE NOCASE'),
   get: (id: string) => get<Family>('families', id),
   create: (input: FamilyInput) =>
-    insert<Family>('families', { ...input, id: uid('fam'), createdAt: new Date().toISOString() }),
+    insert<Family>('families', { ...input, id: newId(), createdAt: new Date().toISOString() }),
   update: (id: string, patch: Partial<FamilyInput>) => update<Family>('families', id, patch),
   remove: (id: string) => removeRow('families', id),
 };
@@ -114,7 +111,7 @@ export const members = {
   list: () => list<Member>('members', 'lastName COLLATE NOCASE, firstName COLLATE NOCASE'),
   get: (id: string) => get<Member>('members', id),
   create: (input: MemberInput) =>
-    insert<Member>('members', { ...input, id: uid('mem'), createdAt: new Date().toISOString() }),
+    insert<Member>('members', { ...input, id: newId(), createdAt: new Date().toISOString() }),
   update: (id: string, patch: Partial<MemberInput>) => update<Member>('members', id, patch),
   remove: (id: string) => removeRow('members', id),
 };
@@ -122,7 +119,7 @@ export const members = {
 export const pledges = {
   list: () => list<Pledge>('pledges', 'year DESC, createdAt DESC'),
   create: (input: PledgeInput) =>
-    insert<Pledge>('pledges', { ...input, id: uid('plg'), createdAt: new Date().toISOString() }),
+    insert<Pledge>('pledges', { ...input, id: newId(), createdAt: new Date().toISOString() }),
   update: (id: string, patch: Partial<PledgeInput>) => update<Pledge>('pledges', id, patch),
   remove: (id: string) => removeRow('pledges', id),
 };
@@ -130,14 +127,14 @@ export const pledges = {
 export const donations = {
   list: () => list<Donation>('donations', 'date DESC, createdAt DESC'),
   create: (input: DonationInput) =>
-    insert<Donation>('donations', { ...input, id: uid('don'), createdAt: new Date().toISOString() }),
+    insert<Donation>('donations', { ...input, id: newId(), createdAt: new Date().toISOString() }),
   update: (id: string, patch: Partial<DonationInput>) => update<Donation>('donations', id, patch),
   remove: (id: string) => removeRow('donations', id),
 };
 
 export const importantDates = {
   list: () => list<ImportantDate>('importantDates', 'date ASC'),
-  create: (input: ImportantDateInput) => insert<ImportantDate>('importantDates', { ...input, id: uid('date') }),
+  create: (input: ImportantDateInput) => insert<ImportantDate>('importantDates', { ...input, id: newId() }),
   update: (id: string, patch: Partial<ImportantDateInput>) => update<ImportantDate>('importantDates', id, patch),
   remove: (id: string) => removeRow('importantDates', id),
 };
@@ -145,7 +142,7 @@ export const importantDates = {
 export const notes = {
   list: () => list<Note>('notes', 'createdAt DESC'),
   create: (input: NoteInput) =>
-    insert<Note>('notes', { ...input, id: uid('note'), createdAt: new Date().toISOString() }),
+    insert<Note>('notes', { ...input, id: newId(), createdAt: new Date().toISOString() }),
   update: (id: string, patch: Partial<NoteInput>) => update<Note>('notes', id, patch),
   remove: (id: string) => removeRow('notes', id),
 };

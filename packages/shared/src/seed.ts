@@ -1,15 +1,18 @@
 import type { Donation, Family, ImportantDate, Member, Note, Pledge } from './schemas.ts';
 
 // ---------------------------------------------------------------------------
-// Deterministic seed data (Mode B — sandbox). No randomness, fixed ids/dates,
-// so every fresh install starts from the same state.
+// Deterministic seed data. No randomness, fixed ids/dates, so every fresh
+// install starts from the same state. IDs are fixed UUIDs with timestamp 0 (they
+// sort before real records): 00000000-0000-7000-8000-KKKK0000NNNN, where KKKK is
+// the entity (0001 family, 0002 member, 0003 pledge, 0004 donation, 0005 date,
+// 0006 note) and NNNN the sequence number.
 // ---------------------------------------------------------------------------
 
 const NOW = '2026-09-16T09:00:00.000Z';
 
 export const seedFamilies: Family[] = [
   {
-    id: 'fam-001',
+    id: '00000000-0000-7000-8000-000100000001',
     name: 'Levy',
     hebrewName: 'לוי',
     address: '12 Orchard Lane',
@@ -24,7 +27,7 @@ export const seedFamilies: Family[] = [
     createdAt: NOW,
   },
   {
-    id: 'fam-002',
+    id: '00000000-0000-7000-8000-000100000002',
     name: 'Cohen',
     hebrewName: 'כהן',
     address: '4 Kfar Street',
@@ -37,7 +40,7 @@ export const seedFamilies: Family[] = [
     createdAt: NOW,
   },
   {
-    id: 'fam-003',
+    id: '00000000-0000-7000-8000-000100000003',
     name: 'Rosenbaum',
     hebrewName: 'ראזנבאום',
     address: '27 Garden Row',
@@ -51,7 +54,7 @@ export const seedFamilies: Family[] = [
     createdAt: NOW,
   },
   {
-    id: 'fam-004',
+    id: '00000000-0000-7000-8000-000100000004',
     name: 'Weiss',
     hebrewName: 'וייס',
     address: '9 Hilltop Close',
@@ -63,7 +66,7 @@ export const seedFamilies: Family[] = [
     createdAt: NOW,
   },
   {
-    id: 'fam-005',
+    id: '00000000-0000-7000-8000-000100000005',
     name: 'Goldstein',
     hebrewName: 'גולדשטיין',
     address: '31 Meadow Way',
@@ -77,7 +80,7 @@ export const seedFamilies: Family[] = [
     createdAt: NOW,
   },
   {
-    id: 'fam-006',
+    id: '00000000-0000-7000-8000-000100000006',
     name: 'Perl',
     hebrewName: 'פרל',
     address: '2 Riverside',
@@ -93,8 +96,8 @@ export const seedFamilies: Family[] = [
 
 export const seedMembers: Member[] = [
   {
-    id: 'mem-001',
-    familyId: 'fam-001',
+    id: '00000000-0000-7000-8000-000200000001',
+    familyId: '00000000-0000-7000-8000-000100000001',
     firstName: 'Avraham',
     lastName: 'Levy',
     hebrewName: 'אברהם',
@@ -111,8 +114,8 @@ export const seedMembers: Member[] = [
     createdAt: NOW,
   },
   {
-    id: 'mem-002',
-    familyId: 'fam-001',
+    id: '00000000-0000-7000-8000-000200000002',
+    familyId: '00000000-0000-7000-8000-000100000001',
     firstName: 'Miriam',
     lastName: 'Levy',
     hebrewName: 'מרים',
@@ -126,8 +129,8 @@ export const seedMembers: Member[] = [
     createdAt: NOW,
   },
   {
-    id: 'mem-003',
-    familyId: 'fam-001',
+    id: '00000000-0000-7000-8000-000200000003',
+    familyId: '00000000-0000-7000-8000-000100000001',
     firstName: 'Daniel',
     lastName: 'Levy',
     hebrewName: 'דניאל',
@@ -140,8 +143,8 @@ export const seedMembers: Member[] = [
     createdAt: NOW,
   },
   {
-    id: 'mem-004',
-    familyId: 'fam-002',
+    id: '00000000-0000-7000-8000-000200000004',
+    familyId: '00000000-0000-7000-8000-000100000002',
     firstName: 'Yosef',
     lastName: 'Cohen',
     hebrewName: 'יוסף',
@@ -156,8 +159,8 @@ export const seedMembers: Member[] = [
     createdAt: NOW,
   },
   {
-    id: 'mem-005',
-    familyId: 'fam-002',
+    id: '00000000-0000-7000-8000-000200000005',
+    familyId: '00000000-0000-7000-8000-000100000002',
     firstName: 'Esther',
     lastName: 'Cohen',
     hebrewName: 'אסתר',
@@ -169,8 +172,8 @@ export const seedMembers: Member[] = [
     createdAt: NOW,
   },
   {
-    id: 'mem-006',
-    familyId: 'fam-003',
+    id: '00000000-0000-7000-8000-000200000006',
+    familyId: '00000000-0000-7000-8000-000100000003',
     firstName: 'Chaim',
     lastName: 'Rosenbaum',
     hebrewName: 'חיים',
@@ -185,8 +188,8 @@ export const seedMembers: Member[] = [
     createdAt: NOW,
   },
   {
-    id: 'mem-007',
-    familyId: 'fam-003',
+    id: '00000000-0000-7000-8000-000200000007',
+    familyId: '00000000-0000-7000-8000-000100000003',
     firstName: 'Sarah',
     lastName: 'Rosenbaum',
     hebrewName: 'שרה',
@@ -198,8 +201,8 @@ export const seedMembers: Member[] = [
     createdAt: NOW,
   },
   {
-    id: 'mem-008',
-    familyId: 'fam-003',
+    id: '00000000-0000-7000-8000-000200000008',
+    familyId: '00000000-0000-7000-8000-000100000003',
     firstName: 'Noah',
     lastName: 'Rosenbaum',
     hebrewName: 'נח',
@@ -212,8 +215,8 @@ export const seedMembers: Member[] = [
     createdAt: NOW,
   },
   {
-    id: 'mem-009',
-    familyId: 'fam-004',
+    id: '00000000-0000-7000-8000-000200000009',
+    familyId: '00000000-0000-7000-8000-000100000004',
     firstName: 'Moshe',
     lastName: 'Weiss',
     hebrewName: 'משה',
@@ -225,8 +228,8 @@ export const seedMembers: Member[] = [
     createdAt: NOW,
   },
   {
-    id: 'mem-010',
-    familyId: 'fam-004',
+    id: '00000000-0000-7000-8000-000200000010',
+    familyId: '00000000-0000-7000-8000-000100000004',
     firstName: 'Devorah',
     hebrewName: 'דבורה',
     lastName: 'Weiss',
@@ -238,8 +241,8 @@ export const seedMembers: Member[] = [
     createdAt: NOW,
   },
   {
-    id: 'mem-011',
-    familyId: 'fam-005',
+    id: '00000000-0000-7000-8000-000200000011',
+    familyId: '00000000-0000-7000-8000-000100000005',
     firstName: 'Ezra',
     lastName: 'Goldstein',
     hebrewName: 'עזרא',
@@ -252,8 +255,8 @@ export const seedMembers: Member[] = [
     createdAt: NOW,
   },
   {
-    id: 'mem-012',
-    familyId: 'fam-006',
+    id: '00000000-0000-7000-8000-000200000012',
+    familyId: '00000000-0000-7000-8000-000100000006',
     firstName: 'Shimon',
     lastName: 'Perl',
     hebrewName: 'שimon',
@@ -269,20 +272,20 @@ export const seedMembers: Member[] = [
 ];
 
 export const seedPledges: Pledge[] = [
-  { id: 'plg-001', fund: 'General', type: 'annual', familyId: 'fam-001', year: 2026, dueDate: '2026-12-31', amount: 2400, currency: 'USD', createdAt: NOW },
-  { id: 'plg-002', fund: 'General', type: 'annual', familyId: 'fam-002', year: 2026, dueDate: '2026-12-31', amount: 1800, currency: 'AUD', createdAt: NOW },
-  { id: 'plg-003', fund: 'Education', type: 'annual', familyId: 'fam-002', year: 2026, dueDate: '2026-12-31', amount: 600, currency: 'NIS', createdAt: NOW },
-  { id: 'plg-004', fund: 'General', type: 'annual', familyId: 'fam-003', year: 2026, dueDate: '2026-12-31', amount: 3000, currency: 'GBP', createdAt: NOW },
-  { id: 'plg-005', fund: 'General', type: 'annual', familyId: 'fam-004', year: 2026, dueDate: '2026-12-31', amount: 1200, currency: 'USD', createdAt: NOW },
-  { id: 'plg-006', fund: 'General', type: 'annual', familyId: 'fam-006', year: 2026, dueDate: '2026-12-31', amount: 2000, currency: 'NIS', createdAt: NOW },
+  { id: '00000000-0000-7000-8000-000300000001', fund: 'General', type: 'annual', familyId: '00000000-0000-7000-8000-000100000001', year: 2026, dueDate: '2026-12-31', amount: 2400, currency: 'USD', createdAt: NOW },
+  { id: '00000000-0000-7000-8000-000300000002', fund: 'General', type: 'annual', familyId: '00000000-0000-7000-8000-000100000002', year: 2026, dueDate: '2026-12-31', amount: 1800, currency: 'AUD', createdAt: NOW },
+  { id: '00000000-0000-7000-8000-000300000003', fund: 'Education', type: 'annual', familyId: '00000000-0000-7000-8000-000100000002', year: 2026, dueDate: '2026-12-31', amount: 600, currency: 'NIS', createdAt: NOW },
+  { id: '00000000-0000-7000-8000-000300000004', fund: 'General', type: 'annual', familyId: '00000000-0000-7000-8000-000100000003', year: 2026, dueDate: '2026-12-31', amount: 3000, currency: 'GBP', createdAt: NOW },
+  { id: '00000000-0000-7000-8000-000300000005', fund: 'General', type: 'annual', familyId: '00000000-0000-7000-8000-000100000004', year: 2026, dueDate: '2026-12-31', amount: 1200, currency: 'USD', createdAt: NOW },
+  { id: '00000000-0000-7000-8000-000300000006', fund: 'General', type: 'annual', familyId: '00000000-0000-7000-8000-000100000006', year: 2026, dueDate: '2026-12-31', amount: 2000, currency: 'NIS', createdAt: NOW },
 ];
 
 export const seedDonations: Donation[] = [
   {
-    id: 'don-001',
+    id: '00000000-0000-7000-8000-000400000001',
     fund: 'General',
-    familyId: 'fam-001',
-    pledgeId: 'plg-001',
+    familyId: '00000000-0000-7000-8000-000100000001',
+    pledgeId: '00000000-0000-7000-8000-000300000001',
     amount: 800,
     currency: 'USD',
     date: '2026-01-15',
@@ -291,10 +294,10 @@ export const seedDonations: Donation[] = [
     createdAt: NOW,
   },
   {
-    id: 'don-002',
+    id: '00000000-0000-7000-8000-000400000002',
     fund: 'General',
-    familyId: 'fam-002',
-    pledgeId: 'plg-002',
+    familyId: '00000000-0000-7000-8000-000100000002',
+    pledgeId: '00000000-0000-7000-8000-000300000002',
     amount: 600,
     currency: 'AUD',
     date: '2026-02-20',
@@ -302,10 +305,10 @@ export const seedDonations: Donation[] = [
     createdAt: NOW,
   },
   {
-    id: 'don-003',
+    id: '00000000-0000-7000-8000-000400000003',
     fund: 'Education',
-    familyId: 'fam-002',
-    pledgeId: 'plg-003',
+    familyId: '00000000-0000-7000-8000-000100000002',
+    pledgeId: '00000000-0000-7000-8000-000300000003',
     amount: 300,
     currency: 'NIS',
     date: '2026-03-10',
@@ -313,10 +316,10 @@ export const seedDonations: Donation[] = [
     createdAt: NOW,
   },
   {
-    id: 'don-004',
+    id: '00000000-0000-7000-8000-000400000004',
     fund: 'General',
-    familyId: 'fam-003',
-    pledgeId: 'plg-004',
+    familyId: '00000000-0000-7000-8000-000100000003',
+    pledgeId: '00000000-0000-7000-8000-000300000004',
     amount: 1500,
     currency: 'GBP',
     date: '2026-03-05',
@@ -325,10 +328,10 @@ export const seedDonations: Donation[] = [
     createdAt: NOW,
   },
   {
-    id: 'don-005',
+    id: '00000000-0000-7000-8000-000400000005',
     fund: 'General',
-    familyId: 'fam-004',
-    pledgeId: 'plg-005',
+    familyId: '00000000-0000-7000-8000-000100000004',
+    pledgeId: '00000000-0000-7000-8000-000300000005',
     amount: 400,
     currency: 'USD',
     date: '2026-04-22',
@@ -336,10 +339,10 @@ export const seedDonations: Donation[] = [
     createdAt: NOW,
   },
   {
-    id: 'don-006',
+    id: '00000000-0000-7000-8000-000400000006',
     fund: 'General',
-    familyId: 'fam-006',
-    pledgeId: 'plg-006',
+    familyId: '00000000-0000-7000-8000-000100000006',
+    pledgeId: '00000000-0000-7000-8000-000300000006',
     amount: 700,
     currency: 'NIS',
     date: '2026-06-14',
@@ -347,10 +350,10 @@ export const seedDonations: Donation[] = [
     createdAt: NOW,
   },
   {
-    id: 'don-007',
+    id: '00000000-0000-7000-8000-000400000007',
     fund: 'General',
-    familyId: 'fam-001',
-    pledgeId: 'plg-001',
+    familyId: '00000000-0000-7000-8000-000100000001',
+    pledgeId: '00000000-0000-7000-8000-000300000001',
     amount: 800,
     currency: 'USD',
     date: '2026-08-30',
@@ -359,10 +362,10 @@ export const seedDonations: Donation[] = [
     createdAt: NOW,
   },
   {
-    id: 'don-008',
+    id: '00000000-0000-7000-8000-000400000008',
     fund: 'General',
-    familyId: 'fam-003',
-    pledgeId: 'plg-004',
+    familyId: '00000000-0000-7000-8000-000100000003',
+    pledgeId: '00000000-0000-7000-8000-000300000004',
     amount: 1000,
     currency: 'GBP',
     date: '2026-09-10',
@@ -373,8 +376,8 @@ export const seedDonations: Donation[] = [
 
 export const seedImportantDates: ImportantDate[] = [
   {
-    id: 'idt-001',
-    memberId: 'mem-003',
+    id: '00000000-0000-7000-8000-000500000001',
+    memberId: '00000000-0000-7000-8000-000200000003',
     type: 'bar_mitzvah',
     recurring: false,
     date: '2023-01-18',
@@ -384,8 +387,8 @@ export const seedImportantDates: ImportantDate[] = [
     note: 'Bar mitzvah at the synagogue',
   },
   {
-    id: 'idt-002',
-    memberId: 'mem-004',
+    id: '00000000-0000-7000-8000-000500000002',
+    memberId: '00000000-0000-7000-8000-000200000004',
     type: 'yahrzeit',
     recurring: true,
     date: '2019-11-02',
@@ -395,8 +398,8 @@ export const seedImportantDates: ImportantDate[] = [
     note: 'Father — candle lit on Friday evening',
   },
   {
-    id: 'idt-003',
-    memberId: 'mem-009',
+    id: '00000000-0000-7000-8000-000500000003',
+    memberId: '00000000-0000-7000-8000-000200000009',
     type: 'yahrzeit',
     recurring: true,
     date: '2021-05-12',
@@ -406,8 +409,8 @@ export const seedImportantDates: ImportantDate[] = [
     note: 'Mother',
   },
   {
-    id: 'idt-004',
-    memberId: 'mem-008',
+    id: '00000000-0000-7000-8000-000500000004',
+    memberId: '00000000-0000-7000-8000-000200000008',
     type: 'bar_mitzvah',
     recurring: false,
     date: '2025-03-07',
@@ -416,8 +419,8 @@ export const seedImportantDates: ImportantDate[] = [
     hebrewYear: 5785,
   },
   {
-    id: 'idt-005',
-    memberId: 'mem-002',
+    id: '00000000-0000-7000-8000-000500000005',
+    memberId: '00000000-0000-7000-8000-000200000002',
     type: 'birthday',
     recurring: true,
     date: '1971-07-02',
@@ -426,8 +429,8 @@ export const seedImportantDates: ImportantDate[] = [
     hebrewYear: 5731,
   },
   {
-    id: 'idt-006',
-    memberId: 'mem-007',
+    id: '00000000-0000-7000-8000-000500000006',
+    memberId: '00000000-0000-7000-8000-000200000007',
     type: 'birthday',
     recurring: true,
     date: '1975-12-12',
@@ -436,8 +439,8 @@ export const seedImportantDates: ImportantDate[] = [
     hebrewYear: 5736,
   },
   {
-    id: 'idt-007',
-    memberId: 'mem-012',
+    id: '00000000-0000-7000-8000-000500000007',
+    memberId: '00000000-0000-7000-8000-000200000012',
     type: 'birthday',
     recurring: true,
     date: '1978-08-21',
@@ -449,8 +452,8 @@ export const seedImportantDates: ImportantDate[] = [
 
 export const seedNotes: Note[] = [
   {
-    id: 'nte-001',
-    familyId: 'fam-001',
+    id: '00000000-0000-7000-8000-000600000001',
+    familyId: '00000000-0000-7000-8000-000100000001',
     type: 'membership',
     priority: 'medium',
     subject: 'High Holy Days seating',
@@ -458,8 +461,8 @@ export const seedNotes: Note[] = [
     createdAt: '2026-08-01T10:00:00.000Z',
   },
   {
-    id: 'nte-002',
-    memberId: 'mem-003',
+    id: '00000000-0000-7000-8000-000600000002',
+    memberId: '00000000-0000-7000-8000-000200000003',
     type: 'lifecycle',
     priority: 'high',
     subject: 'Bar mitzvah prep',
@@ -467,8 +470,8 @@ export const seedNotes: Note[] = [
     createdAt: '2026-08-20T14:30:00.000Z',
   },
   {
-    id: 'nte-003',
-    familyId: 'fam-003',
+    id: '00000000-0000-7000-8000-000600000003',
+    familyId: '00000000-0000-7000-8000-000100000003',
     type: 'donation',
     priority: 'medium',
     subject: 'Torah portion sponsorship',
