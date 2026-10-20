@@ -18,16 +18,14 @@ import { useMutation } from '@tanstack/react-query';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import type { Member, Note, NoteInput } from '@pilzno/shared';
+import type { Member, Note, NoteInput } from '@shulcrm/shared';
 import { createNote, listMembers, updateNote } from '@/features/core/service';
+import { LookupSelect } from './LookupSelect';
 
 const formSchema = z.object({
   familyId: z.string().optional().or(z.literal('')),
   memberId: z.string().optional().or(z.literal('')),
-  type: z
-    .enum(['general', 'pastoral', 'membership', 'lifecycle', 'donation', 'other'])
-    .optional()
-    .or(z.literal('')),
+  type: z.string().optional().or(z.literal('')),
   priority: z.enum(['low', 'medium', 'high']).optional().or(z.literal('')),
   subject: z.string().optional().or(z.literal('')),
   body: z.string().min(1, 'Note text is required'),
@@ -57,7 +55,15 @@ interface Props {
   members?: Member[];
 }
 
-export function NoteFormDialog({ open, onClose, onSaved, initial, fixedFamilyId, fixedMemberId, members }: Props) {
+export function NoteFormDialog({
+  open,
+  onClose,
+  onSaved,
+  initial,
+  fixedFamilyId,
+  fixedMemberId,
+  members,
+}: Props) {
   const showMemberSelect = !fixedMemberId;
   const { data: allMembers } = useQuery({
     queryKey: ['members'],
@@ -143,24 +149,14 @@ export function NoteFormDialog({ open, onClose, onSaved, initial, fixedFamilyId,
               </FormControl>
             )}
             <Stack direction="row" spacing={2}>
-              <FormControl sx={{ flexGrow: 1 }}>
-                <FormLabel>Type</FormLabel>
-                <Controller
-                  name="type"
-                  control={control}
-                  render={({ field }) => (
-                    <Select {...field} value={field.value ?? ''}>
-                      <MenuItem value="">—</MenuItem>
-                      <MenuItem value="general">General</MenuItem>
-                      <MenuItem value="pastoral">Pastoral</MenuItem>
-                      <MenuItem value="membership">Membership</MenuItem>
-                      <MenuItem value="lifecycle">Lifecycle</MenuItem>
-                      <MenuItem value="donation">Donation</MenuItem>
-                      <MenuItem value="other">Other</MenuItem>
-                    </Select>
-                  )}
-                />
-              </FormControl>
+              <LookupSelect
+                control={control}
+                name="type"
+                label="Type"
+                kind="noteTypes"
+                emptyLabel="—"
+                sx={{ flexGrow: 1 }}
+              />
               <FormControl sx={{ flexGrow: 1 }}>
                 <FormLabel>Priority</FormLabel>
                 <Controller
@@ -186,7 +182,9 @@ export function NoteFormDialog({ open, onClose, onSaved, initial, fixedFamilyId,
               helperText={errors.body?.message}
               {...register('body')}
             />
-            {mutation.isError && <Alert severity="error">{(mutation.error as Error).message}</Alert>}
+            {mutation.isError && (
+              <Alert severity="error">{(mutation.error as Error).message}</Alert>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>

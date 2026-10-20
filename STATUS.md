@@ -1,4 +1,4 @@
-# Pilzno Synagogue CRM — Task Status
+# Shul CRM — Task Status (reference install: Pilzno)
 
 > Last updated: 2026-10-20 · Plan: see `ROADMAP.md` (old plans in `docs/archive/`)
 > Working directory: `C:\Users\binya\Documents\CRM 3\CRM 3`
@@ -17,16 +17,16 @@ end-to-end and verified: **Families** (with duplicate detection), **Members**, *
 ```
 pilzno-crm/
 ├── apps/
-│   ├── api/                  # @pilzno/api — Express 4 + node:sqlite (zero native deps)
+│   ├── api/                  # @shulcrm/api — Express 4 + node:sqlite (zero native deps)
 │   │   └── src/
 │   │       ├── index.ts      # HTTP server: routes, validation, error shape, CORS, first-boot seed
 │   │       ├── repo.ts       # data access: CRUD for all six entities + dashboardStats() + reseed()
 │   │       └── db.ts         # SQLite schema (WAL, FK cascades) — data/crm.sqlite
-│   └── web/                  # @pilzno/web — React 18 + MUI 5 + React Query
+│   └── web/                  # @shulcrm/web — React 18 + MUI 5 + React Query
 │       └── src/features/core/
 │           └── service.ts    # thin fetch client for /api/* (same public functions as the old mock)
 ├── packages/
-│   └── shared/               # @pilzno/shared — single source of truth
+│   └── shared/               # @shulcrm/shared — single source of truth
 │       └── src/
 │           ├── schemas.ts    # zod schemas, entity/input types, api input schemas, error shape
 │           ├── seed.ts       # deterministic seed data (6 families, 12 members, 6 pledges, 8 donations, 7 dates, 3 notes)
@@ -50,7 +50,7 @@ pilzno-crm/
 | `/api/dashboard/stats` | GET | `max(0, pledge − paid)` per pledge; sums current-year donations |
 | `/api/reset` | POST | reseed deterministic demo data |
 
-- Request bodies validated with `@pilzno/shared` input schemas (zod); errors use the shared error shape
+- Request bodies validated with `@shulcrm/shared` input schemas (zod); errors use the shared error shape
   `{ "error": { "message": string, "issues"?: [{path, message}] } }` — 400 validation, 404 not found, 400 malformed JSON, 500 otherwise.
 - Cascades via DDL FKs: family → members/pledges/donations; member → important dates; pledge delete → donations keep history (`pledgeId` → NULL via `ON DELETE SET NULL`).
 - First boot seeds demo data if the DB is empty; `POST /api/reset` reseeds anytime.
@@ -66,8 +66,8 @@ pilzno-crm/
 
 Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6 Tishrei, 5787").
 
-- **Shared schema** (`@pilzno/shared`): `ImportantDate` / `ImportantDateInput` include optional `hebrewDay`, `hebrewMonth`, `hebrewYear`. The legacy free-text `hebrewDate` field was removed from the schema **and dropped as a SQLite column** (guarded `ALTER TABLE … DROP COLUMN` migration in `db.ts`; existing rows keep their `hebrewDay/Month/Year`).
-- **Converter** (`@pilzno/shared/hebrewCalendar.ts`, our own code since Phase 0): `gregorianToHebrew(iso, { afterNightfall })`, `hebrewToGregorianISO(d,m,y)`, `formatHebrew(d,m,y)`. The value is computed at save time and stored; display reads the stored value and never recomputes live.
+- **Shared schema** (`@shulcrm/shared`): `ImportantDate` / `ImportantDateInput` include optional `hebrewDay`, `hebrewMonth`, `hebrewYear`. The legacy free-text `hebrewDate` field was removed from the schema **and dropped as a SQLite column** (guarded `ALTER TABLE … DROP COLUMN` migration in `db.ts`; existing rows keep their `hebrewDay/Month/Year`).
+- **Converter** (`@shulcrm/shared/hebrewCalendar.ts`, our own code since Phase 0): `gregorianToHebrew(iso, { afterNightfall })`, `hebrewToGregorianISO(d,m,y)`, `formatHebrew(d,m,y)`. The value is computed at save time and stored; display reads the stored value and never recomputes live.
 - **Form** (`ImportantDateFormDialog`): auto-computes the Hebrew date from the Gregorian date (live preview) and stores it on save; the user can still override.
 - **Display**: `FamilyDetailModal` / `MemberDetailModal` render the Hebrew date in the Dates table via `formatHebrew()` (falls back to "—" when unset).
 
@@ -87,10 +87,10 @@ Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6
 
 ## Phase 0 — Clean base (2026-10-20)
 
-- **IDs are UUIDv7** everywhere (`newId()` in `@pilzno/shared/ids.ts`, no dependency). Schemas validate ids and
+- **IDs are UUIDv7** everywhere (`newId()` in `@shulcrm/shared/ids.ts`, no dependency). Schemas validate ids and
   foreign keys as UUIDs. Seed uses fixed UUIDs (`00000000-0000-7000-8000-KKKK0000NNNN`). A one-time migration in
   `db.ts` rewrites legacy prefixed ids (`fam-001`) and their foreign keys in one transaction.
-- **Own Hebrew calendar** (`@pilzno/shared/hebrewCalendar.ts`) replaces GPL `@hebcal/core`. Pure day arithmetic,
+- **Own Hebrew calendar** (`@shulcrm/shared/hebrewCalendar.ts`) replaces GPL `@hebcal/core`. Pure day arithmetic,
   so no timezone drift. It matched hebcal on every day from 1900 to 2240 before hebcal was removed.
 - **Before/after nightfall**: important dates store `afterNightfall`; the form requires the answer and previews
   the Hebrew date for each choice. After nightfall = next Hebrew day.
@@ -103,7 +103,7 @@ Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6
 
 ## Phase 1 — Hebrew recurrence (2026-10-20)
 
-- **Recurrence rules** live in `@pilzno/shared/recurrence.ts`: `occurrencesBetween`, `nextOccurrence`,
+- **Recurrence rules** live in `@shulcrm/shared/recurrence.ts`: `occurrencesBetween`, `nextOccurrence`,
   `yahrzeitInYear`, `hebrewAnniversaryInYear`. A date's `recurBy` (`hebrew | gregorian`) defaults by type
   (`DEFAULT_RECUR_BY` in `dateTypes.ts`). A Hebrew occurrence is the daytime date; it begins the evening before.
 - **API**: `GET /api/important-dates/occurrences?from=&to=` (calendar, max 400 days) and `/upcoming` share
@@ -111,9 +111,21 @@ Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6
 - **Checked** against Hebcal's yahrzeit calculator: 1,680 yahrzeits for 84 test deaths, no differences.
 - **Calendar** shows each month's occurrences with Hebrew day numbers; a click opens the member.
 
+## Phase 2 — Configurability (2026-10-20)
+
+- **Settings** live in `apps/api/src/settings.ts` (`/api/settings`, `/api/settings/{org,features,terms,lookups/:kind}`,
+  `/api/org/logo`), shapes and defaults in `@shulcrm/shared/settings.ts`. The web reads them through
+  `useSettings()` (labels, dropdown options, `money()`, `t()` terms, recurrence options) and `LookupSelect`.
+- **Migrations**: `apps/api/src/migrations.ts` with a `schema_version` table. 1 = the old baseline, 2 = settings,
+  files (logo), and donations without the payment-method CHECK.
+- **Import/export**: `apps/api/src/importExport.ts` (field specs in `@shulcrm/shared/importSpecs.ts`),
+  `spreadsheet.ts` (CSV via papaparse, XLSX via fflate). Routes: `/api/import/parse`, `/api/import/:entity/{preview,commit}`,
+  `/api/export/:entity?format=csv|xlsx`.
+- **Tests**: 63 (recurrence, calendar, import/export, settings).
+
 ## Not yet done
 
-See `ROADMAP.md`. Next: Phase 2 (configurability: org profile, logo, lookup lists, import).
+See `ROADMAP.md`. Next: Phase 3 (receipts, yahrzeit notices, email, reports, events).
 
 ## Commands
 
@@ -122,7 +134,7 @@ npm install                 # from repo root (workspaces)
 npm run dev                 # api (:3000) + web (:5173) together
 npm run dev:api | dev:web   # individually
 npm run typecheck | lint    # all workspaces
-npm test -w @pilzno/api     # Vitest suite (data access, Hebrew calendar, UUIDs)
+npm test -w @shulcrm/api     # Vitest suite (data access, Hebrew calendar, UUIDs)
 npm run license:check       # fail on any non-permissive dependency license
 npm run build               # api typecheck + web production build
 ```

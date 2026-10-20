@@ -24,8 +24,8 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { formatMoney, type Donation, type ImportantDate, type Member, type Note, type Pledge } from '@pilzno/shared';
-import { formatHebrew } from '@pilzno/shared';
+import type { Donation, ImportantDate, Member, Note, Pledge } from '@shulcrm/shared';
+import { formatHebrew } from '@shulcrm/shared';
 import {
   deleteDonation,
   deleteFamily,
@@ -47,7 +47,8 @@ import {
 import { Field } from '@/features/core/Field';
 import { MemberDetailModal } from '@/features/members/MemberDetailModal';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { DATE_TYPE_LABEL, effectiveRecurBy } from '@pilzno/shared';
+import { effectiveRecurBy } from '@shulcrm/shared';
+import { useSettings } from '@/features/settings/useSettings';
 
 interface Props {
   familyId: string;
@@ -60,17 +61,13 @@ const PLEDGE_TYPE: Record<NonNullable<Pledge['type']>, string> = {
   one_time: 'One-time',
 };
 
-const DONATION_METHOD: Record<Donation['method'], string> = {
-  cash: 'Cash',
-  check: 'Check',
-  credit: 'Credit',
-  transfer: 'Transfer',
-};
 
 
 export function FamilyDetailModal({ familyId, open, onClose }: Props) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState(0);
+  const settings = useSettings();
+  const { t, money, label } = settings;
 
   const { data: detail, isLoading, isError, error } = useQuery({
     queryKey: qk.familyDetail(familyId),
@@ -119,7 +116,7 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
-      <DialogTitle>{family ? family.name : 'Family'}</DialogTitle>
+      <DialogTitle>{family ? family.name : t('family')}</DialogTitle>
       <DialogContent dividers>
         {isLoading && (
           <Stack alignItems="center" sx={{ py: 6 }}>
@@ -141,9 +138,10 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
               sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
             >
               <Tab label="Overview" />
-              <Tab label={`Members (${members.length})`} />
-              <Tab label={`Pledges (${pledges.length})`} />
-              <Tab label={`Donations (${donations.length})`} />
+              <Tab label={`${t('members')} (${members.length})`} />
+              {/* Hidden, not removed, when pledges are off: the tabs are addressed by index. */}
+              <Tab label={`${t('pledges')} (${pledges.length})`} sx={settings.features.pledges ? undefined : { display: 'none' }} />
+              <Tab label={`${t('donations')} (${donations.length})`} />
               <Tab label={`Dates (${dates.length})`} />
               <Tab label={`Notes (${notes.length})`} />
             </Tabs>
@@ -192,7 +190,7 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
               <Stack spacing={2}>
                 <Stack direction="row" justifyContent="flex-end">
                   <Button variant="contained" startIcon={<AddIcon />} onClick={() => setMemberDialog({ open: true })}>
-                    Add member
+                    {`Add ${t('member').toLowerCase()}`}
                   </Button>
                 </Stack>
                 {members.length === 0 ? (
@@ -258,7 +256,7 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
               <Stack spacing={2}>
                 <Stack direction="row" justifyContent="flex-end">
                   <Button variant="contained" startIcon={<AddIcon />} onClick={() => setPledgeDialog({ open: true })}>
-                    Add pledge
+                    {`Add ${t('pledge').toLowerCase()}`}
                   </Button>
                 </Stack>
                 {pledges.length === 0 ? (
@@ -281,11 +279,11 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
                       <TableBody>
                         {pledges.map((p) => (
                           <TableRow key={p.id} hover>
-                            <TableCell>{p.fund}</TableCell>
+                            <TableCell>{label('funds', p.fund)}</TableCell>
                             <TableCell>{p.type ? PLEDGE_TYPE[p.type] : '—'}</TableCell>
                             <TableCell>{p.year}</TableCell>
                             <TableCell>{p.dueDate ?? '—'}</TableCell>
-                            <TableCell>{formatMoney(p.amount, p.currency)}</TableCell>
+                            <TableCell>{money(p.amount, p.currency)}</TableCell>
                             <TableCell align="right">
                               <IconButton
                                 size="small"
@@ -320,7 +318,7 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
                     startIcon={<AddIcon />}
                     onClick={() => setDonationDialog({ open: true })}
                   >
-                    Add donation
+                    {`Add ${t('donation').toLowerCase()}`}
                   </Button>
                 </Stack>
                 {donations.length === 0 ? (
@@ -344,9 +342,9 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
                         {donations.map((d) => (
                           <TableRow key={d.id} hover>
                             <TableCell>{d.date}</TableCell>
-                            <TableCell>{d.fund}</TableCell>
-                            <TableCell>{formatMoney(d.amount, d.currency)}</TableCell>
-                            <TableCell>{DONATION_METHOD[d.method]}</TableCell>
+                            <TableCell>{label('funds', d.fund)}</TableCell>
+                            <TableCell>{money(d.amount, d.currency)}</TableCell>
+                            <TableCell>{label('paymentMethods', d.method)}</TableCell>
                             <TableCell>{d.note ?? '—'}</TableCell>
                             <TableCell align="right">
                               <IconButton
@@ -401,11 +399,11 @@ export function FamilyDetailModal({ familyId, open, onClose }: Props) {
                       <TableBody>
                         {dates.map((d) => (
                           <TableRow key={d.id} hover>
-                            <TableCell>{DATE_TYPE_LABEL[d.type]}</TableCell>
+                            <TableCell>{settings.dateType(d.type).label}</TableCell>
                             <TableCell>{memberNames.get(d.memberId) ?? d.memberId}</TableCell>
                             <TableCell>{d.date}</TableCell>
                             <TableCell>{d.hebrewDay && d.hebrewMonth && d.hebrewYear ? formatHebrew(d.hebrewDay, d.hebrewMonth, d.hebrewYear) : '—'}</TableCell>
-                            <TableCell>{d.recurring ? (effectiveRecurBy(d) === 'hebrew' ? 'Hebrew date' : 'English date') : '—'}</TableCell>
+                            <TableCell>{d.recurring ? (effectiveRecurBy(d, settings.recurrence) === 'hebrew' ? 'Hebrew date' : 'English date') : '—'}</TableCell>
                             <TableCell align="right">
                               <IconButton
                                 size="small"

@@ -4,17 +4,9 @@ import StarBorderIcon from '@mui/icons-material/StarBorder';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { CURRENCIES, formatMoney } from '@pilzno/shared';
 import { getDashboardStats, listUpcomingDates } from '@/features/core/service';
 import { qk } from '@/features/core/queryKeys';
-import { palette } from '@/app/theme';
-import { DATE_TYPE_LABEL } from '@pilzno/shared';
-
-const breakdown = (totals: Record<string, number>) => {
-  const parts = CURRENCIES.map((c) => (totals[c] > 0 ? formatMoney(totals[c], c) : null)).filter((s): s is string => s !== null);
-  return parts.length > 0 ? parts.join('   ·   ') : '—';
-};
-
+import { useSettings } from '@/features/settings/useSettings';
 
 /** Short local date for the dashboard list (e.g. "Oct 28"), no UTC drift. */
 const shortDate = (iso: string) => {
@@ -24,6 +16,8 @@ const shortDate = (iso: string) => {
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const settings = useSettings();
+  const { t, moneyTotals } = settings;
   const { data: stats, isLoading, isError } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: getDashboardStats,
@@ -34,10 +28,12 @@ export function DashboardPage() {
   });
 
   const kpis = [
-    { label: 'Families', value: stats ? String(stats.families) : '—', hint: `${stats?.activeFamilies ?? 0} active` },
-    { label: 'Members', value: stats ? String(stats.members) : '—', hint: `${stats?.activeMembers ?? 0} active` },
-    { label: 'Open Pledges', value: stats ? breakdown(stats.openPledgeBalance) : '—', hint: 'Remaining balance' },
-    { label: 'Donated (YTD)', value: stats ? breakdown(stats.donatedYtd) : '—', hint: 'Year to date' },
+    { label: t('families'), value: stats ? String(stats.families) : '—', hint: `${stats?.activeFamilies ?? 0} active` },
+    { label: t('members'), value: stats ? String(stats.members) : '—', hint: `${stats?.activeMembers ?? 0} active` },
+    ...(settings.features.pledges
+      ? [{ label: `Open ${t('pledges')}`, value: stats ? moneyTotals(stats.openPledgeBalance) : '—', hint: 'Remaining balance' }]
+      : []),
+    { label: `${t('donations')} (YTD)`, value: stats ? moneyTotals(stats.donatedYtd) : '—', hint: 'Year to date' },
   ];
 
   return (
@@ -46,22 +42,22 @@ export function DashboardPage() {
         <Box>
           <Typography variant="h5">Dashboard</Typography>
           <Typography variant="body2" color="text.secondary">
-            Welcome to the Pilzno Synagogue CRM.
+            {`Welcome to the ${settings.org.name} CRM.`}
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
           <Button variant="outlined" startIcon={<PersonAddIcon />} onClick={() => navigate('/families')}>
-            New Family
+            {`New ${t('family')}`}
           </Button>
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/members')}>
-            New Member
+            {`New ${t('member')}`}
           </Button>
         </Stack>
       </Stack>
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {kpis.map((kpi) => (
-          <Grid item xs={12} sm={6} md={3} key={kpi.label}>
+          <Grid item xs={12} sm={6} md={12 / kpis.length} key={kpi.label}>
             <Card sx={{ height: '100%' }}>
               <CardContent>
                 <Typography variant="body2" color="text.secondary">
@@ -70,7 +66,7 @@ export function DashboardPage() {
                 {isLoading ? (
                   <Skeleton variant="text" width={100} />
                 ) : (
-                  <Typography variant="h4" sx={{ color: palette.purple.primary }}>
+                  <Typography variant="h4" sx={{ color: 'primary.main' }}>
                     {kpi.value}
                   </Typography>
                 )}
@@ -96,7 +92,7 @@ export function DashboardPage() {
           ) : upcoming && upcoming.length > 0 ? (
             <Stack spacing={1}>
               {upcoming.slice(0, 5).map((d) => (
-                <Stack key={d.id} direction="row" alignItems="baseline" spacing={2}>
+                <Stack key={`${d.id}-${d.nextOccurrence}`} direction="row" alignItems="baseline" spacing={2}>
                   <Typography variant="body2" sx={{ width: 90, flexShrink: 0 }}>
                     {shortDate(d.nextOccurrence)}
                   </Typography>
@@ -105,7 +101,7 @@ export function DashboardPage() {
                     {d.familyName}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ ml: 'auto' }}>
-                    {DATE_TYPE_LABEL[d.type]}
+                    {settings.dateType(d.type).label}
                   </Typography>
                 </Stack>
               ))}

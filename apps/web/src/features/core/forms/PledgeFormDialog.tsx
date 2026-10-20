@@ -18,8 +18,10 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { CURRENCIES, CURRENCY_LABEL, type Pledge, type PledgeInput } from '@pilzno/shared';
+import type { Pledge, PledgeInput } from '@shulcrm/shared';
 import { createPledge, listFamilies, updatePledge } from '@/features/core/service';
+import { useSettings } from '@/features/settings/useSettings';
+import { LookupSelect } from './LookupSelect';
 
 const formSchema = z.object({
   fund: z.string().min(1, 'Fund is required'),
@@ -28,19 +30,19 @@ const formSchema = z.object({
   year: z.coerce.number().int('Year must be a whole number'),
   dueDate: z.string().optional().or(z.literal('')),
   amount: z.coerce.number().nonnegative('Amount must be 0 or more'),
-  currency: z.enum(CURRENCIES).default('USD'),
+  currency: z.string().min(1, 'Currency is required'),
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
-const emptyForm = (familyId: string): FormValues => ({
-  fund: 'General',
+const emptyForm = (familyId: string, fund: string, currency: string): FormValues => ({
+  fund,
   type: 'annual',
   familyId,
   year: new Date().getFullYear(),
   dueDate: '',
   amount: 0,
-  currency: 'USD',
+  currency,
 });
 
 interface Props {
@@ -54,6 +56,17 @@ interface Props {
 
 export function PledgeFormDialog({ open, onClose, onSaved, initial, fixedFamilyId }: Props) {
   const fixed = Boolean(fixedFamilyId) && !initial;
+  const settings = useSettings();
+  const { t } = settings;
+  const firstActive = (
+    items: ReadonlyArray<{ key: string; active: boolean }>,
+    preferred?: string,
+  ) =>
+    items.find((i) => i.active && i.key === preferred)?.key ??
+    items.find((i) => i.active)?.key ??
+    '';
+  const defaultFund = firstActive(settings.lookups.funds, 'General');
+  const defaultCurrency = firstActive(settings.lookups.currencies, settings.org.defaultCurrency);
   const { data: families } = useQuery({
     queryKey: ['families'],
     queryFn: listFamilies,
@@ -68,7 +81,10 @@ export function PledgeFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<FormValues>({ resolver: zodResolver(formSchema), defaultValues: emptyForm(defaultFamilyId) });
+  } = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: emptyForm(defaultFamilyId, defaultFund, defaultCurrency),
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -80,15 +96,16 @@ export function PledgeFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
         year: initial.year,
         dueDate: initial.dueDate ?? '',
         amount: initial.amount,
-        currency: initial.currency ?? 'USD',
+        currency: initial.currency ?? defaultCurrency,
       });
     } else {
-      reset(emptyForm(fixedFamilyId ?? families?.[0]?.id ?? ''));
+      reset(emptyForm(fixedFamilyId ?? families?.[0]?.id ?? '', defaultFund, defaultCurrency));
     }
-  }, [open, initial, fixedFamilyId, families, reset]);
+  }, [open, initial, fixedFamilyId, families, defaultFund, defaultCurrency, reset]);
 
   const mutation = useMutation({
-    mutationFn: (input: PledgeInput) => (initial ? updatePledge(initial.id, input) : createPledge(input)),
+    mutationFn: (input: PledgeInput) =>
+      initial ? updatePledge(initial.id, input) : createPledge(input),
     onSuccess: () => {
       onSaved();
       onClose();
@@ -97,7 +114,7 @@ export function PledgeFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
 
   const onSubmit = handleSubmit((values) => {
     const input: PledgeInput = {
-      fund: values.fund.trim(),
+      fund: values.fund,
       type: values.type || undefined,
       familyId: values.familyId,
       year: values.year,
@@ -112,13 +129,13 @@ export function PledgeFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{initial ? 'Edit Pledge' : 'New Pledge'}</DialogTitle>
+      <DialogTitle>{`${initial ? 'Edit' : 'New'} ${t('pledge')}`}</DialogTitle>
       <form onSubmit={onSubmit} noValidate>
         <DialogContent dividers>
           <Stack spacing={2.5} sx={{ mt: 0.5 }}>
             {!fixed && (
               <FormControl error={Boolean(errors.familyId)}>
-                <FormLabel>Family</FormLabel>
+                <FormLabel>{t('family')}</FormLabel>
                 <Controller
                   name="familyId"
                   control={control}
@@ -139,12 +156,12 @@ export function PledgeFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
                 )}
               </FormControl>
             )}
-            <TextField
+            <LookupSelect
+              control={control}
+              name="fund"
               label="Fund"
-              required
-              error={Boolean(errors.fund)}
-              helperText={errors.fund?.message}
-              {...register('fund')}
+              kind="funds"
+              error={errors.fund?.message}
             />
             <FormControl>
               <FormLabel>Type</FormLabel>
@@ -188,30 +205,24 @@ export function PledgeFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
                 helperText={errors.amount?.message}
                 {...register('amount')}
               />
-              <FormControl sx={{ width: 150 }}>
-                <FormLabel>Currency</FormLabel>
-                <Controller
-                  name="currency"
-                  control={control}
-                  render={({ field }) => (
-                    <Select {...field} value={field.value ?? ''}>
-                      {CURRENCIES.map((c) => (
-                        <MenuItem key={c} value={c}>
-                          {CURRENCY_LABEL[c]}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  )}
-                />
-              </FormControl>
+              <LookupSelect
+                control={control}
+                name="currency"
+                label="Currency"
+                kind="currencies"
+                error={errors.currency?.message}
+                sx={{ width: 150 }}
+              />
             </Stack>
-            {mutation.isError && <Alert severity="error">{(mutation.error as Error).message}</Alert>}
+            {mutation.isError && (
+              <Alert severity="error">{(mutation.error as Error).message}</Alert>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={onClose}>Cancel</Button>
           <Button type="submit" variant="contained" disabled={mutation.isPending}>
-            {initial ? 'Save changes' : 'Create pledge'}
+            {initial ? 'Save changes' : `Create ${t('pledge').toLowerCase()}`}
           </Button>
         </DialogActions>
       </form>

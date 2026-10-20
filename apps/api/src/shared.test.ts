@@ -8,7 +8,7 @@ import {
   isHebrewLeapYear,
   isUuid,
   newId,
-} from '@pilzno/shared';
+} from '@shulcrm/shared';
 
 // Reference pairs. The implementation was also cross-checked day by day for
 // 1900-2240 (124,182 days) against an independent calendar before release.

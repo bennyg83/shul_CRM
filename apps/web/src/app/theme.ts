@@ -1,60 +1,46 @@
-import { createTheme, type ThemeOptions } from '@mui/material/styles';
+import { alpha, createTheme, darken, lighten } from '@mui/material/styles';
 
-// Pilzno Synagogue palette (from the authentic emblem)
-const palette = {
-  purple: {
-    primary: '#4A148C',
-    dark: '#2E0058',
-    medium: '#6A1B9A',
-    light: '#F3E5F5',
-  },
-  gold: {
-    primary: '#FFD700',
-    soft: '#FFF8D6',
-    dark: '#B8860B',
-  },
-  green: '#2E7D32',
-  background: '#FAFAFA',
-};
+// The theme is built from the shul's two colors (Settings → Organization), so each
+// install looks like its own shul. Shades are derived, not configured.
 
-const themeOptions: ThemeOptions = {
-  palette: {
-    mode: 'light',
-    primary: { main: palette.purple.primary, dark: palette.purple.dark, light: palette.purple.light },
-    secondary: { main: palette.gold.dark },
-    success: { main: palette.green },
-    background: { default: palette.background, paper: '#FFFFFF' },
-  },
-  shape: { borderRadius: 12 },
-  typography: {
-    fontFamily: `"Roboto", "Heebo", "Arial Hebrew", sans-serif`,
-    h4: { fontWeight: 700, color: palette.purple.dark },
-    h5: { fontWeight: 700, color: palette.purple.dark },
-    h6: { fontWeight: 600 },
-    button: { textTransform: 'none', fontWeight: 600 },
-  },
-  components: {
-    MuiButton: {
-      defaultProps: { variant: 'contained' },
-      styleOverrides: {
-        root: { borderRadius: 10 },
-      },
+export function createAppTheme(primary: string, secondary: string) {
+  const dark = darken(primary, 0.35);
+  return createTheme({
+    palette: {
+      mode: 'light',
+      primary: { main: primary, dark, light: lighten(primary, 0.9) },
+      secondary: { main: secondary },
+      success: { main: '#2E7D32' },
+      background: { default: '#FAFAFA', paper: '#FFFFFF' },
     },
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          boxShadow: '0 1px 3px rgba(46, 0, 88, 0.08)',
-          border: '1px solid rgba(74, 20, 140, 0.08)',
+    shape: { borderRadius: 12 },
+    typography: {
+      fontFamily: `"Roboto", "Heebo", "Arial Hebrew", sans-serif`,
+      h4: { fontWeight: 700, color: dark },
+      h5: { fontWeight: 700, color: dark },
+      h6: { fontWeight: 600 },
+      button: { textTransform: 'none', fontWeight: 600 },
+    },
+    components: {
+      MuiButton: {
+        defaultProps: { variant: 'contained' },
+        styleOverrides: {
+          root: { borderRadius: 10 },
+        },
+      },
+      MuiCard: {
+        styleOverrides: {
+          root: {
+            boxShadow: `0 1px 3px ${alpha(dark, 0.08)}`,
+            border: `1px solid ${alpha(primary, 0.08)}`,
+          },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: { backgroundImage: 'none' },
         },
       },
     },
-    MuiPaper: {
-      styleOverrides: {
-        root: { backgroundImage: 'none' },
-      },
-    },
-  },
-};
-
-export const theme = createTheme(themeOptions);
-export { palette };
+  });
+}

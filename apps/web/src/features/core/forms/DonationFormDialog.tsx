@@ -18,30 +18,38 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { CURRENCIES, CURRENCY_LABEL, formatMoney, type Donation, type DonationInput, type Pledge } from '@pilzno/shared';
+import type { Donation, DonationInput, Pledge } from '@shulcrm/shared';
 import { createDonation, listFamilies, updateDonation } from '@/features/core/service';
+import { useSettings } from '@/features/settings/useSettings';
+import { LookupSelect } from './LookupSelect';
 
 const formSchema = z.object({
   familyId: z.string().min(1, 'Family is required'),
   fund: z.string().min(1, 'Fund is required'),
   pledgeId: z.string().optional().or(z.literal('')),
   amount: z.coerce.number().nonnegative('Amount must be 0 or more'),
-  currency: z.enum(CURRENCIES).default('USD'),
+  currency: z.string().min(1, 'Currency is required'),
   date: z.string().min(1, 'Date is required'),
-  method: z.enum(['cash', 'check', 'credit', 'transfer']),
+  method: z.string().min(1, 'Method is required'),
   note: z.string().optional().or(z.literal('')),
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
-const emptyForm = (familyId: string, fund: string, date: string): FormValues => ({
+const emptyForm = (
+  familyId: string,
+  fund: string,
+  currency: string,
+  method: string,
+  date: string,
+): FormValues => ({
   familyId,
   fund,
   pledgeId: '',
   amount: 0,
-  currency: 'USD',
+  currency,
   date,
-  method: 'check',
+  method,
   note: '',
 });
 
@@ -58,8 +66,30 @@ interface Props {
   defaultFund?: string;
 }
 
-export function DonationFormDialog({ open, onClose, onSaved, initial, pledges, fixedFamilyId, defaultFund }: Props) {
+export function DonationFormDialog({
+  open,
+  onClose,
+  onSaved,
+  initial,
+  pledges,
+  fixedFamilyId,
+  defaultFund,
+}: Props) {
   const fixed = Boolean(fixedFamilyId) && !initial;
+  const settings = useSettings();
+  const { t, money } = settings;
+  const firstActive = (
+    items: ReadonlyArray<{ key: string; active: boolean }>,
+    preferred?: string,
+  ) =>
+    items.find((i) => i.active && i.key === preferred)?.key ??
+    items.find((i) => i.active)?.key ??
+    '';
+  const defaults = {
+    fund: firstActive(settings.lookups.funds, defaultFund ?? 'General'),
+    currency: firstActive(settings.lookups.currencies, settings.org.defaultCurrency),
+    method: firstActive(settings.lookups.paymentMethods, 'check'),
+  };
   const { data: families } = useQuery({
     queryKey: ['families'],
     queryFn: listFamilies,
@@ -82,7 +112,7 @@ export function DonationFormDialog({ open, onClose, onSaved, initial, pledges, f
         fund: initial.fund,
         pledgeId: initial.pledgeId ?? '',
         amount: initial.amount,
-        currency: initial.currency ?? 'USD',
+        currency: initial.currency ?? defaults.currency,
         date: initial.date,
         method: initial.method,
         note: initial.note ?? '',
@@ -91,15 +121,27 @@ export function DonationFormDialog({ open, onClose, onSaved, initial, pledges, f
       reset(
         emptyForm(
           fixedFamilyId ?? families?.[0]?.id ?? '',
-          defaultFund ?? 'General',
-          new Date().toISOString().slice(0, 10)
-        )
+          defaults.fund,
+          defaults.currency,
+          defaults.method,
+          new Date().toISOString().slice(0, 10),
+        ),
       );
     }
-  }, [open, initial, fixedFamilyId, families, defaultFund, reset]);
+  }, [
+    open,
+    initial,
+    fixedFamilyId,
+    families,
+    defaults.fund,
+    defaults.currency,
+    defaults.method,
+    reset,
+  ]);
 
   const mutation = useMutation({
-    mutationFn: (input: DonationInput) => (initial ? updateDonation(initial.id, input) : createDonation(input)),
+    mutationFn: (input: DonationInput) =>
+      initial ? updateDonation(initial.id, input) : createDonation(input),
     onSuccess: () => {
       onSaved();
       onClose();
@@ -109,7 +151,7 @@ export function DonationFormDialog({ open, onClose, onSaved, initial, pledges, f
   const onSubmit = handleSubmit((values) => {
     const input: DonationInput = {
       familyId: values.familyId,
-      fund: values.fund.trim(),
+      fund: values.fund,
       pledgeId: values.pledgeId || undefined,
       amount: values.amount,
       currency: values.currency,
@@ -124,13 +166,13 @@ export function DonationFormDialog({ open, onClose, onSaved, initial, pledges, f
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{initial ? 'Edit Donation' : 'New Donation'}</DialogTitle>
+      <DialogTitle>{`${initial ? 'Edit' : 'New'} ${t('donation')}`}</DialogTitle>
       <form onSubmit={onSubmit} noValidate>
         <DialogContent dividers>
           <Stack spacing={2.5} sx={{ mt: 0.5 }}>
             {!fixed && (
               <FormControl error={Boolean(errors.familyId)}>
-                <FormLabel>Family</FormLabel>
+                <FormLabel>{t('family')}</FormLabel>
                 <Controller
                   name="familyId"
                   control={control}
@@ -151,16 +193,16 @@ export function DonationFormDialog({ open, onClose, onSaved, initial, pledges, f
                 )}
               </FormControl>
             )}
-            <TextField
+            <LookupSelect
+              control={control}
+              name="fund"
               label="Fund"
-              required
-              error={Boolean(errors.fund)}
-              helperText={errors.fund?.message}
-              {...register('fund')}
+              kind="funds"
+              error={errors.fund?.message}
             />
-            {pledges && pledges.length > 0 && (
+            {settings.features.pledges && pledges && pledges.length > 0 && (
               <FormControl>
-                <FormLabel>Link to pledge (optional)</FormLabel>
+                <FormLabel>{`Link to ${t('pledge').toLowerCase()} (optional)`}</FormLabel>
                 <Controller
                   name="pledgeId"
                   control={control}
@@ -169,7 +211,7 @@ export function DonationFormDialog({ open, onClose, onSaved, initial, pledges, f
                       <MenuItem value="">— Not linked —</MenuItem>
                       {pledges.map((p) => (
                         <MenuItem key={p.id} value={p.id}>
-                          {`${p.fund} ${p.year} — ${formatMoney(p.amount, p.currency)}`}
+                          {`${settings.label('funds', p.fund)} ${p.year} — ${money(p.amount, p.currency)}`}
                         </MenuItem>
                       ))}
                     </Select>
@@ -199,46 +241,33 @@ export function DonationFormDialog({ open, onClose, onSaved, initial, pledges, f
               />
             </Stack>
             <Stack direction="row" spacing={2}>
-              <FormControl sx={{ width: 150 }}>
-                <FormLabel>Currency</FormLabel>
-                <Controller
-                  name="currency"
-                  control={control}
-                  render={({ field }) => (
-                    <Select {...field} value={field.value ?? ''}>
-                      {CURRENCIES.map((c) => (
-                        <MenuItem key={c} value={c}>
-                          {CURRENCY_LABEL[c]}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  )}
-                />
-              </FormControl>
-              <FormControl sx={{ flexGrow: 1 }}>
-                <FormLabel>Method</FormLabel>
-                <Controller
-                  name="method"
-                  control={control}
-                  render={({ field }) => (
-                    <Select {...field} value={field.value ?? ''}>
-                      <MenuItem value="cash">Cash</MenuItem>
-                      <MenuItem value="check">Check</MenuItem>
-                      <MenuItem value="credit">Credit</MenuItem>
-                      <MenuItem value="transfer">Transfer</MenuItem>
-                    </Select>
-                  )}
-                />
-              </FormControl>
+              <LookupSelect
+                control={control}
+                name="currency"
+                label="Currency"
+                kind="currencies"
+                error={errors.currency?.message}
+                sx={{ width: 150 }}
+              />
+              <LookupSelect
+                control={control}
+                name="method"
+                label="Method"
+                kind="paymentMethods"
+                error={errors.method?.message}
+                sx={{ flexGrow: 1 }}
+              />
             </Stack>
             <TextField label="Note" multiline minRows={2} {...register('note')} />
-            {mutation.isError && <Alert severity="error">{(mutation.error as Error).message}</Alert>}
+            {mutation.isError && (
+              <Alert severity="error">{(mutation.error as Error).message}</Alert>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={onClose}>Cancel</Button>
           <Button type="submit" variant="contained" disabled={mutation.isPending}>
-            {initial ? 'Save changes' : 'Create donation'}
+            {initial ? 'Save changes' : `Create ${t('donation').toLowerCase()}`}
           </Button>
         </DialogActions>
       </form>

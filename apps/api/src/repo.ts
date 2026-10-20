@@ -1,4 +1,5 @@
 import { db } from './db.ts';
+import { getLookups, recurrenceOptions } from './settings.ts';
 
 // ---------------------------------------------------------------------------
 // Data access for the six core entities. Column names mirror the JSON field
@@ -91,9 +92,8 @@ import type {
   Pledge,
   PledgeInput,
   UpcomingDate,
-} from '@pilzno/shared';
+} from '@shulcrm/shared';
 import {
-  CURRENCIES,
   addDaysISO,
   daysBetweenISO,
   effectiveRecurBy,
@@ -102,7 +102,7 @@ import {
   occurrencesBetween,
   todayISO,
   type RecurrenceOptions,
-} from '@pilzno/shared';
+} from '@shulcrm/shared';
 
 // ---------------------------------------------------------------------------
 // Entity repos (cascades handled by the DDL foreign keys in db.ts)
@@ -164,7 +164,12 @@ export const notes = {
 
 /** Every occurrence of every important date in [from, to] (inclusive ISO dates), with
  * member/family resolved. `today` (ISO) sets daysUntil; it is injectable for tests. */
-export function dateOccurrences(from: string, to: string, today = todayISO(), options?: RecurrenceOptions): UpcomingDate[] {
+export function dateOccurrences(
+  from: string,
+  to: string,
+  today = todayISO(),
+  options: RecurrenceOptions = recurrenceOptions(),
+): UpcomingDate[] {
   const memberById = new Map(list<Member>('members', 'lastName COLLATE NOCASE').map((m) => [m.id, m]));
   const familyById = new Map(list<Family>('families', 'name COLLATE NOCASE').map((f) => [f.id, f]));
 
@@ -186,7 +191,7 @@ export function dateOccurrences(from: string, to: string, today = todayISO(), op
         hebrewDay: dt.hebrewDay,
         hebrewMonth: dt.hebrewMonth,
         hebrewYear: dt.hebrewYear,
-        recurBy: dt.recurring ? effectiveRecurBy(dt) : 'once',
+        recurBy: dt.recurring ? effectiveRecurBy(dt, options) : 'once',
         occurrenceHebrew: gregorianToHebrew(occurrence),
       });
     }
@@ -198,7 +203,11 @@ export function dateOccurrences(from: string, to: string, today = todayISO(), op
 }
 
 /** Upcoming important dates within `days` days of `today` (ISO), soonest first. */
-export function upcomingImportantDates(days = 90, today = todayISO(), options?: RecurrenceOptions): UpcomingDate[] {
+export function upcomingImportantDates(
+  days = 90,
+  today = todayISO(),
+  options: RecurrenceOptions = recurrenceOptions(),
+): UpcomingDate[] {
   return dateOccurrences(today, addDaysISO(today, days), today, options);
 }
 
@@ -241,7 +250,7 @@ import {
   seedMembers,
   seedNotes,
   seedPledges,
-} from '@pilzno/shared/seed';
+} from '@shulcrm/shared/seed';
 
 // ---------------------------------------------------------------------------
 // Dashboard stats (same math as the old mock service: overpayment on one
@@ -266,7 +275,7 @@ export function dashboardStats(): DashboardStats {
   // Per-currency totals: group by currency so mixed-currency KPIs don't add apples and oranges.
   const currencyTotals = (rows: { currency: string; total: number }[]): Record<string, number> => {
     const out: Record<string, number> = {};
-    for (const c of CURRENCIES) out[c] = 0;
+    for (const c of getLookups().currencies) out[c.key] = 0;
     for (const r of rows) out[r.currency] = r.total;
     return out;
   };
@@ -300,7 +309,7 @@ export function dashboardStats(): DashboardStats {
 }
 
 // ---------------------------------------------------------------------------
-// Seed (deterministic data from @pilzno/shared)
+// Seed (deterministic data from @shulcrm/shared)
 // ---------------------------------------------------------------------------
 
 export function reseed(): void {

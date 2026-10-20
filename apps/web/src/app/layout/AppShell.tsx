@@ -1,6 +1,9 @@
+import { useEffect, useState, type ReactNode } from 'react';
 import {
+  AppBar,
   Box,
   Drawer,
+  IconButton,
   List,
   ListItemButton,
   ListItemIcon,
@@ -10,8 +13,8 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import { useLocation } from 'react-router-dom';
-import type { ReactNode } from 'react';
+import { alpha } from '@mui/material/styles';
+import { NavLink, useLocation } from 'react-router-dom';
 
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import PeopleIcon from '@mui/icons-material/People';
@@ -20,7 +23,10 @@ import EventNoteIcon from '@mui/icons-material/EventNote';
 import StarIcon from '@mui/icons-material/Star';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import SettingsIcon from '@mui/icons-material/Settings';
-import { palette } from '@/app/theme';
+import MenuIcon from '@mui/icons-material/Menu';
+import { useSettings } from '@/features/settings/useSettings';
+import { logoUrl } from '@/features/core/service';
+import { initials } from '@/app/initials';
 
 const DRAWER_WIDTH = 256;
 
@@ -30,87 +36,155 @@ interface NavItem {
   icon: ReactNode;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', path: '/', icon: <DashboardIcon /> },
-  { label: 'Families', path: '/families', icon: <GroupsIcon /> },
-  { label: 'Members', path: '/members', icon: <PeopleIcon /> },
-  { label: 'Pledges & Donations', path: '/pledges', icon: <StarIcon /> },
-  { label: 'Important Dates', path: '/dates', icon: <EventNoteIcon /> },
-  { label: 'Calendar', path: '/calendar', icon: <CalendarMonthIcon /> },
-  { label: 'Settings', path: '/settings', icon: <SettingsIcon /> },
-];
+/** The shul's logo, or its initials on its color when none is uploaded. */
+export function ShulMark({ size = 36 }: { size?: number }) {
+  const { org, hasLogo, logoVersion } = useSettings();
+  const theme = useTheme();
+  if (hasLogo) {
+    return (
+      <Box
+        component="img"
+        src={logoUrl(logoVersion)}
+        alt={`${org.shortName} logo`}
+        sx={{ width: size, height: size, objectFit: 'contain', borderRadius: 1, flexShrink: 0 }}
+      />
+    );
+  }
+  return (
+    <Box
+      aria-hidden
+      sx={{
+        width: size,
+        height: size,
+        flexShrink: 0,
+        borderRadius: 2,
+        background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+        display: 'grid',
+        placeItems: 'center',
+        color: theme.palette.secondary.light,
+        fontWeight: 800,
+        fontSize: size * 0.4,
+      }}
+    >
+      {initials(org.shortName)}
+    </Box>
+  );
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const location = useLocation();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const { org, features, t } = useSettings();
+
+  // Close the phone menu after navigating.
+  useEffect(() => setMobileOpen(false), [location.pathname]);
+
+  const navItems: NavItem[] = [
+    { label: 'Dashboard', path: '/', icon: <DashboardIcon /> },
+    { label: t('families'), path: '/families', icon: <GroupsIcon /> },
+    { label: t('members'), path: '/members', icon: <PeopleIcon /> },
+    {
+      label: features.pledges ? `${t('pledges')} & ${t('donations')}` : t('donations'),
+      path: '/pledges',
+      icon: <StarIcon />,
+    },
+    { label: 'Important Dates', path: '/dates', icon: <EventNoteIcon /> },
+    { label: 'Calendar', path: '/calendar', icon: <CalendarMonthIcon /> },
+    { label: 'Settings', path: '/settings', icon: <SettingsIcon /> },
+  ];
+  const divider = alpha(theme.palette.primary.main, 0.12);
+
+  const drawer = (
+    <>
+      <Toolbar sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <ShulMark />
+        <Box sx={{ minWidth: 0 }}>
+          <Typography
+            variant="subtitle1"
+            noWrap
+            sx={{ fontWeight: 700, color: 'primary.dark', lineHeight: 1.1 }}
+            title={org.name}
+          >
+            {org.shortName}
+          </Typography>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            Synagogue CRM
+          </Typography>
+        </Box>
+      </Toolbar>
+      <List sx={{ px: 1.5, py: 1 }}>
+        {navItems.map((item) => {
+          const active = location.pathname === item.path;
+          return (
+            <ListItemButton
+              key={item.path}
+              component={NavLink}
+              to={item.path}
+              sx={{
+                mb: 0.5,
+                borderRadius: 2,
+                color: active ? 'primary.main' : 'text.primary',
+                bgcolor: active ? 'primary.light' : 'transparent',
+                fontWeight: active ? 700 : 500,
+                '& .MuiListItemIcon-root': { color: active ? 'primary.main' : 'text.secondary' },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 40 }}>{item.icon}</ListItemIcon>
+              <ListItemText primary={item.label} />
+            </ListItemButton>
+          );
+        })}
+      </List>
+    </>
+  );
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       <Drawer
         variant={isDesktop ? 'permanent' : 'temporary'}
-        open={isDesktop}
+        open={isDesktop || mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        ModalProps={{ keepMounted: true }}
         sx={{
-          width: DRAWER_WIDTH,
+          width: isDesktop ? DRAWER_WIDTH : 0,
           flexShrink: 0,
           [`& .MuiDrawer-paper`]: {
             width: DRAWER_WIDTH,
             boxSizing: 'border-box',
-            borderRight: `1px solid ${palette.purple.light}`,
+            borderRight: `1px solid ${divider}`,
           },
         }}
       >
-        <Toolbar sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box
-            sx={{
-              width: 36,
-              height: 36,
-              borderRadius: 2,
-              background: `linear-gradient(135deg, ${palette.purple.primary}, ${palette.purple.medium})`,
-              display: 'grid',
-              placeItems: 'center',
-              color: palette.gold.primary,
-              fontWeight: 800,
-            }}
-          >
-            P
-          </Box>
-          <Box>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: palette.purple.dark, lineHeight: 1.1 }}>
-              Pilzno
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              Synagogue CRM
-            </Typography>
-          </Box>
-        </Toolbar>
-        <List sx={{ px: 1.5, py: 1 }}>
-          {NAV_ITEMS.map((item) => {
-            const active = location.pathname === item.path;
-            return (
-              <ListItemButton
-                key={item.path}
-                component="a"
-                href={item.path}
-                sx={{
-                  mb: 0.5,
-                  borderRadius: 2,
-                  color: active ? palette.purple.primary : 'text.primary',
-                  bgcolor: active ? palette.purple.light : 'transparent',
-                  fontWeight: active ? 700 : 500,
-                  '& .MuiListItemIcon-root': { color: active ? palette.purple.primary : 'text.secondary' },
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 40 }}>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.label} />
-              </ListItemButton>
-            );
-          })}
-        </List>
+        {drawer}
       </Drawer>
 
       <Box component="main" sx={{ flexGrow: 1, minWidth: 0, bgcolor: 'background.default' }}>
-        <Toolbar sx={{ position: 'sticky', top: 0, zIndex: 10, bgcolor: 'background.paper', borderBottom: `1px solid ${palette.purple.light}` }} />
+        <AppBar
+          position="sticky"
+          elevation={0}
+          color="inherit"
+          sx={{ bgcolor: 'background.paper', borderBottom: `1px solid ${divider}` }}
+        >
+          <Toolbar sx={{ gap: 1 }}>
+            {!isDesktop && (
+              <>
+                <IconButton edge="start" aria-label="Open menu" onClick={() => setMobileOpen(true)}>
+                  <MenuIcon />
+                </IconButton>
+                <ShulMark size={28} />
+                <Typography
+                  variant="subtitle1"
+                  noWrap
+                  sx={{ fontWeight: 700, color: 'primary.dark' }}
+                >
+                  {org.shortName}
+                </Typography>
+              </>
+            )}
+          </Toolbar>
+        </AppBar>
         <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1200, mx: 'auto' }}>{children}</Box>
       </Box>
     </Box>

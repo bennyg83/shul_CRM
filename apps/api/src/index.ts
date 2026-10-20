@@ -8,8 +8,14 @@ import {
   memberInputSchema,
   noteInputSchema,
   pledgeInputSchema,
+  IMPORT_ENTITIES,
+  IMPORT_SPECS,
+  LOOKUP_KINDS,
+  type ImportEntity,
+  type ImportRequest,
   daysBetweenISO,
-} from '@pilzno/shared';
+  type LookupKind,
+} from '@shulcrm/shared';
 import type {
   DonationInput,
   FamilyInput,
@@ -17,11 +23,14 @@ import type {
   MemberInput,
   NoteInput,
   PledgeInput,
-} from '@pilzno/shared';
+} from '@shulcrm/shared';
 import * as repo from './repo.ts';
+import * as settings from './settings.ts';
+import * as importExport from './importExport.ts';
+import { readTable, writeCsv, writeXlsx } from './spreadsheet.ts';
 
 // ---------------------------------------------------------------------------
-// Pilzno Synagogue CRM — API server (Express 4 + SQLite via repo.ts)
+// Shul CRM — API server (Express 4 + SQLite via repo.ts)
 // Dev: `npm run dev:api` from the repo root (node --watch, port 3000)
 // Web talks to /api/* (Vite dev proxy -> http://localhost:3000).
 // ---------------------------------------------------------------------------
@@ -64,6 +73,7 @@ function parsePatch(input: ZodObject<ZodRawShape>, body: unknown): Record<string
 // Standard REST routes for one entity (list/create on /, get/patch/delete on /:id).
 // Entities without a `get` (pledges, donations, ...) simply skip GET /:id.
 function resourceRoutes<I>(
+  entity: string,
   input: ZodObject<ZodRawShape>,
   e: {
     list(): unknown[];
@@ -78,7 +88,9 @@ function resourceRoutes<I>(
     res.json(e.list());
   });
   router.post('/', (req, res) => {
-    res.status(201).json(e.create(input.parse(req.body) as I));
+    const data = input.parse(req.body);
+    settings.checkLookups(entity, data);
+    res.status(201).json(e.create(data as I));
   });
   if (e.get) {
     const get = e.get;
@@ -89,7 +101,9 @@ function resourceRoutes<I>(
     });
   }
   router.patch('/:id', (req, res) => {
-    res.json(e.update(req.params.id, parsePatch(input, req.body) as Partial<I>));
+    const patch = parsePatch(input, req.body);
+    settings.checkLookups(entity, patch);
+    res.json(e.update(req.params.id, patch as Partial<I>));
   });
   router.delete('/:id', (req, res) => {
     if (!e.remove(req.params.id)) throw new repo.NotFound(`${req.originalUrl}: not found`);
@@ -106,15 +120,108 @@ app.get('/api/dashboard/stats', (_req, res) => {
   res.json(repo.dashboardStats());
 });
 
+// Shul settings: org profile, features, terms, lists, and the logo.
+app.get('/api/settings', (_req, res) => {
+  res.json(settings.getSettings());
+});
+app.put('/api/settings/org', (req, res) => {
+  res.json(settings.saveOrg(req.body));
+});
+app.put('/api/settings/features', (req, res) => {
+  res.json(settings.saveFeatures(req.body));
+});
+app.put('/api/settings/terms', (req, res) => {
+  res.json(settings.saveTerms(req.body));
+});
+app.get('/api/settings/lookups/:kind/usage', (req, res) => {
+  if (!(LOOKUP_KINDS as readonly string[]).includes(req.params.kind)) throw new repo.NotFound('Unknown list');
+  res.json(settings.lookupUsage(req.params.kind as LookupKind));
+});
+app.put('/api/settings/lookups/:kind', (req, res) => {
+  res.json(settings.saveLookup(req.params.kind, req.body));
+});
+app.get('/api/org/logo', (_req, res) => {
+  const logo = settings.getLogo();
+  if (!logo) throw new repo.NotFound('No logo has been uploaded');
+  res.setHeader('Content-Type', logo.contentType);
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.setHeader('Last-Modified', new Date(logo.updatedAt).toUTCString());
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.send(Buffer.from(logo.data));
+});
+app.put(
+  '/api/org/logo',
+  express.raw({ type: () => true, limit: settings.LOGO_MAX_BYTES + 1024 }),
+  (req, res) => {
+    settings.saveLogo(new Uint8Array(Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)));
+    res.json(settings.getSettings());
+  },
+);
+app.delete('/api/org/logo', (_req, res) => {
+  settings.removeLogo();
+  res.status(204).end();
+});
+
+// Import (CSV or Excel): parse the upload, preview with a column mapping, then commit.
+// Export: every record of one kind as CSV or Excel, with the same column names.
+const importEntity = (name: string): ImportEntity => {
+  if (!(IMPORT_ENTITIES as readonly string[]).includes(name)) throw new repo.NotFound(`Cannot import or export "${name}"`);
+  return name as ImportEntity;
+};
+app.post(
+  '/api/import/parse',
+  express.raw({ type: () => true, limit: '10mb' }),
+  (req, res) => {
+    const data = new Uint8Array(Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
+    if (data.length === 0) throw new settings.BadRequest('The upload was empty');
+    let table: string[][];
+    try {
+      table = readTable(data);
+    } catch (err) {
+      throw new settings.BadRequest(err instanceof Error ? err.message : 'Could not read the file');
+    }
+    if (table.length === 0) throw new settings.BadRequest('The file has no rows');
+    const [headers, ...rows] = table;
+    if (rows.length > importExport.MAX_IMPORT_ROWS) {
+      throw new settings.BadRequest(`At most ${importExport.MAX_IMPORT_ROWS} rows per import`);
+    }
+    res.json({ headers, rows });
+  },
+);
+app.post('/api/import/:entity/preview', express.json({ limit: '20mb' }), (req, res) => {
+  res.json(importExport.previewImport(importEntity(req.params.entity), req.body as ImportRequest));
+});
+app.post('/api/import/:entity/commit', express.json({ limit: '20mb' }), (req, res) => {
+  res.json(importExport.commitImport(importEntity(req.params.entity), req.body as ImportRequest));
+});
+app.get('/api/export/:entity', (req, res) => {
+  const entity = importEntity(req.params.entity);
+  const { headers, rows } = importExport.exportTable(entity);
+  const org = settings.getOrg();
+  const stamp = new Date().toISOString().slice(0, 10);
+  const base = `${org.shortName}-${entity}-${stamp}`.replace(/[^\p{L}\p{N}._-]+/gu, '-');
+  // The install id travels with the export (ROADMAP ground rules: where a file came from).
+  res.setHeader('X-Org-Id', org.orgId);
+  if (req.query.format === 'xlsx') {
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(base)}.xlsx`);
+    res.send(Buffer.from(writeXlsx(IMPORT_SPECS[entity].label, headers, rows)));
+    return;
+  }
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(base)}.csv`);
+  res.send(writeCsv(headers, rows));
+});
+
 app.post('/api/reset', (_req, res) => {
   repo.reseed();
   res.json({ ok: true });
 });
 
-app.use('/api/families', resourceRoutes<FamilyInput>(familyInputSchema, repo.families));
-app.use('/api/members', resourceRoutes<MemberInput>(memberInputSchema, repo.members));
-app.use('/api/pledges', resourceRoutes<PledgeInput>(pledgeInputSchema, repo.pledges));
-app.use('/api/donations', resourceRoutes<DonationInput>(donationInputSchema, repo.donations));
+app.use('/api/families', resourceRoutes<FamilyInput>('families', familyInputSchema, repo.families));
+app.use('/api/members', resourceRoutes<MemberInput>('members', memberInputSchema, repo.members));
+app.use('/api/pledges', resourceRoutes<PledgeInput>('pledges', pledgeInputSchema, repo.pledges));
+app.use('/api/donations', resourceRoutes<DonationInput>('donations', donationInputSchema, repo.donations));
 
 // Aggregate "upcoming" view across families. Registered before the resource
 // router so GET /upcoming is never captured by a /:id handler.
@@ -134,9 +241,9 @@ app.get('/api/important-dates/occurrences', (req, res) => {
 });
 app.use(
   '/api/important-dates',
-  resourceRoutes<ImportantDateInput>(importantDateInputSchema, repo.importantDates),
+  resourceRoutes<ImportantDateInput>('importantDates', importantDateInputSchema, repo.importantDates),
 );
-app.use('/api/notes', resourceRoutes<NoteInput>(noteInputSchema, repo.notes));
+app.use('/api/notes', resourceRoutes<NoteInput>('notes', noteInputSchema, repo.notes));
 
 // Composed detail views (one entity + its related records, for the detail modals).
 // Registered after the resource routes; the two-segment path does not match GET /:id.
@@ -153,8 +260,20 @@ app.use((req, res) => {
   res.status(404).json({ error: { message: `Not found: ${req.method} ${req.originalUrl}` } });
 });
 
-// Single error shape for all non-2xx JSON responses (@pilzno/shared apiErrorSchema).
+// Single error shape for all non-2xx JSON responses (@shulcrm/shared apiErrorSchema).
 const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+  if (err instanceof settings.BadRequest) {
+    res.status(400).json({ error: { message: err.message } });
+    return;
+  }
+  if (err instanceof settings.Conflict) {
+    res.status(409).json({ error: { message: err.message } });
+    return;
+  }
+  if ((err as { type?: string }).type === 'entity.too.large') {
+    res.status(413).json({ error: { message: 'The upload is too large' } });
+    return;
+  }
   if (err instanceof repo.NotFound) {
     res.status(404).json({ error: { message: err.message } });
     return;
@@ -182,6 +301,7 @@ if (repo.families.list().length === 0) {
   repo.reseed();
   console.log('[api] seeded demo data');
 }
+settings.reconcileLookups();
 
 // There is no login yet (ROADMAP Phase 5), so only this machine may connect.
 // Set HOST=0.0.0.0 to expose it on the network once auth exists.

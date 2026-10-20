@@ -18,8 +18,9 @@ import { useMutation } from '@tanstack/react-query';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import type { Family, FamilyInput } from '@pilzno/shared';
+import type { Family, FamilyInput } from '@shulcrm/shared';
 import { createFamily, updateFamily, listFamilies } from '@/features/core/service';
+import { useSettings } from '@/features/settings/useSettings';
 
 const formSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -70,12 +71,14 @@ function findDuplicates(families: Family[], current?: Family): DuplicateFamily[]
     .filter(
       (f) =>
         f.id !== (current?.id ?? '') &&
-        ((f.name.toLowerCase() === (current?.name ?? '').toLowerCase()) || (f.phone && f.phone === current?.phone)),
+        (f.name.toLowerCase() === (current?.name ?? '').toLowerCase() ||
+          (f.phone && f.phone === current?.phone)),
     )
     .map((f) => ({ id: f.id, name: f.name, phone: f.phone }));
 }
 
 export function FamilyFormDialog({ open, onClose, onSaved, initial }: Props) {
+  const { t } = useSettings();
   const {
     control,
     register,
@@ -119,7 +122,8 @@ export function FamilyFormDialog({ open, onClose, onSaved, initial }: Props) {
   const duplicates = findDuplicates(existingFamilies, initial);
 
   const mutation = useMutation({
-    mutationFn: (input: FamilyInput) => (initial ? updateFamily(initial.id, input) : createFamily(input)),
+    mutationFn: (input: FamilyInput) =>
+      initial ? updateFamily(initial.id, input) : createFamily(input),
     onSuccess: () => {
       onSaved();
       onClose();
@@ -173,7 +177,8 @@ export function FamilyFormDialog({ open, onClose, onSaved, initial }: Props) {
           <DialogTitle>Potential duplicate found</DialogTitle>
           <DialogContent dividers>
             <DialogContentText sx={{ mb: 2 }}>
-              A family with the same name or phone already exists. Are you sure you want to create a new record?
+              A family with the same name or phone already exists. Are you sure you want to create a
+              new record?
             </DialogContentText>
             <Stack spacing={1} sx={{ maxHeight: 200, overflow: 'auto' }}>
               {duplicates.map((f) => (
@@ -198,7 +203,7 @@ export function FamilyFormDialog({ open, onClose, onSaved, initial }: Props) {
         </>
       ) : (
         <>
-          <DialogTitle>{initial ? `Edit ${initial.name}` : 'New Family'}</DialogTitle>
+          <DialogTitle>{initial ? `Edit ${initial.name}` : `New ${t('family')}`}</DialogTitle>
           <form onSubmit={onSubmit} noValidate>
             <DialogContent dividers>
               <Stack spacing={2.5} sx={{ mt: 0.5 }}>
@@ -209,14 +214,14 @@ export function FamilyFormDialog({ open, onClose, onSaved, initial }: Props) {
                   </Alert>
                 )}
                 <TextField
-                  label="Family name"
+                  label={`${t('family')} name`}
                   required
                   error={Boolean(errors.name)}
                   helperText={errors.name?.message}
                   {...register('name')}
                 />
                 <TextField
-                  label="Family name in Hebrew (שם בעברית)"
+                  label={`${t('family')} name in Hebrew (שם בעברית)`}
                   inputProps={{ dir: 'rtl' }}
                   placeholder="לוי"
                   {...register('hebrewName')}

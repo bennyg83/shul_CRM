@@ -1,23 +1,23 @@
 {
-  "name": "pilzno-crm",
+  "name": "shul-crm",
   "private": true,
   "version": "0.0.1",
   "license": "UNLICENSED",
-  "description": "Pilzno Synagogue CRM — monorepo (api + web + shared)",
+  "description": "Shul CRM — monorepo (api + web + shared); reference install: Pilzno",
   "type": "module",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -k -n api,web -c cyan,magenta \"npm run dev -w @pilzno/api\" \"npm run dev -w @pilzno/web\"",
-    "dev:api": "npm run dev -w @pilzno/api",
-    "dev:web": "npm run dev -w @pilzno/web",
-    "build": "npm run build -w @pilzno/api && npm run build -w @pilzno/web",
-    "typecheck": "npm run typecheck -w @pilzno/api && npm run typecheck -w @pilzno/web",
-    "lint": "npm run lint -w @pilzno/api && npm run lint -w @pilzno/web",
-    "preview": "npm run preview -w @pilzno/web",
-    "start": "npm run start -w @pilzno/api",
+    "dev": "concurrently -k -n api,web -c cyan,magenta \"npm run dev -w @shulcrm/api\" \"npm run dev -w @shulcrm/web\"",
+    "dev:api": "npm run dev -w @shulcrm/api",
+    "dev:web": "npm run dev -w @shulcrm/web",
+    "build": "npm run build -w @shulcrm/api && npm run build -w @shulcrm/web",
+    "typecheck": "npm run typecheck -w @shulcrm/api && npm run typecheck -w @shulcrm/web",
+    "lint": "npm run lint -w @shulcrm/api && npm run lint -w @shulcrm/web",
+    "preview": "npm run preview -w @shulcrm/web",
+    "start": "npm run start -w @shulcrm/api",
     "license:check": "node scripts/license-check.mjs"
   },
   "devDependencies": {

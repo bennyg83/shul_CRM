@@ -29,7 +29,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
-import type { Member, MemberInput } from '@pilzno/shared';
+import type { Member, MemberInput } from '@shulcrm/shared';
 import {
   createMember,
   deleteMember,
@@ -38,6 +38,7 @@ import {
   updateMember,
 } from '@/features/core/service';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { useSettings } from '@/features/settings/useSettings';
 
 const formSchema = z
   .object({
@@ -75,6 +76,7 @@ const emptyForm = (familyId: string): FormValues => ({
 export function MembersPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const { t } = useSettings();
   const [familyFilter, setFamilyFilter] = useState('all');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
@@ -185,27 +187,27 @@ export function MembersPage() {
         sx={{ mb: 3 }}
       >
         <Box>
-          <Typography variant="h5">Members</Typography>
+          <Typography variant="h5">{t('members')}</Typography>
           <Typography variant="body2" color="text.secondary">
             Member profiles and their family links.
           </Typography>
         </Box>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate} disabled={!families?.length}>
-          New Member
+          {`New ${t('member')}`}
         </Button>
       </Stack>
 
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
         <TextField
           size="small"
-          placeholder="Search members…"
+          placeholder={`Search ${t('members').toLowerCase()}…`}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} /> }}
           sx={{ maxWidth: 320 }}
         />
         <FormControl size="small" sx={{ minWidth: 180 }}>
-          <FormLabel sx={{ mb: 0.5, fontSize: '0.75rem' }}>Family</FormLabel>
+          <FormLabel sx={{ mb: 0.5, fontSize: '0.75rem' }}>{t('family')}</FormLabel>
           <Select value={familyFilter} onChange={(e) => setFamilyFilter(e.target.value)}>
             <MenuItem value="all">All families</MenuItem>
             {families?.map((f) => (
@@ -234,10 +236,10 @@ export function MembersPage() {
           <CardContent>
             <Typography variant="body2" color="text.secondary">
               {search || familyFilter !== 'all'
-                ? 'No members match your filters.'
+                ? `No ${t('members').toLowerCase()} match your filters.`
                 : !families?.length
-                  ? 'Create a family first, then add its members.'
-                  : 'No members yet — add the first one.'}
+                  ? `Create a ${t('family').toLowerCase()} first, then add its ${t('members').toLowerCase()}.`
+                  : `No ${t('members').toLowerCase()} yet — add the first one.`}
             </Typography>
           </CardContent>
         </Card>
@@ -251,7 +253,7 @@ export function MembersPage() {
                 <TableRow>
                   <TableCell>Name</TableCell>
                   <TableCell>Hebrew</TableCell>
-                  <TableCell>Family</TableCell>
+                  <TableCell>{t('family')}</TableCell>
                   <TableCell>Gender</TableCell>
                   <TableCell>Born</TableCell>
                   <TableCell>Contact</TableCell>
@@ -317,7 +319,7 @@ export function MembersPage() {
       <Drawer anchor="right" open={drawerOpen} onClose={closeDrawer}>
         <Box sx={{ width: { xs: '100%', sm: 440 }, p: 3 }}>
           <Typography variant="h6" sx={{ mb: 3 }}>
-            {editing ? `Edit ${editing.firstName} ${editing.lastName}` : 'New Member'}
+            {editing ? `Edit ${editing.firstName} ${editing.lastName}` : `New ${t('member')}`}
           </Typography>
           {families && families.length === 0 ? (
             <Alert severity="info">Create a family first — members are linked to a family.</Alert>
@@ -325,7 +327,7 @@ export function MembersPage() {
             <form onSubmit={onSubmit} noValidate>
               <Stack spacing={2.5}>
                 <FormControl fullWidth required error={Boolean(errors.familyId)}>
-                  <FormLabel>Family</FormLabel>
+                  <FormLabel>{t('family')}</FormLabel>
                   <Controller
                     name="familyId"
                     control={control}

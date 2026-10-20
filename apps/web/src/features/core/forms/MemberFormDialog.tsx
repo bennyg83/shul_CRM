@@ -18,8 +18,10 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import type { Member, MemberInput } from '@pilzno/shared';
+import type { Member, MemberInput } from '@shulcrm/shared';
 import { createMember, listFamilies, listMembers, updateMember } from '@/features/core/service';
+import { useSettings } from '@/features/settings/useSettings';
+import { LookupSelect } from './LookupSelect';
 
 const formSchema = z.object({
   familyId: z.string().min(1, 'Family is required'),
@@ -29,7 +31,7 @@ const formSchema = z.object({
   fatherHebrewName: z.string().optional().or(z.literal('')),
   motherHebrewName: z.string().optional().or(z.literal('')),
   gender: z.enum(['male', 'female', 'other']),
-  role: z.enum(['husband', 'wife', 'son', 'daughter', 'other']).optional().or(z.literal('')),
+  role: z.string().optional().or(z.literal('')),
   birthDate: z.string().optional().or(z.literal('')),
   deathDate: z.string().optional().or(z.literal('')),
   email: z.string().email().optional().or(z.literal('')),
@@ -70,6 +72,7 @@ interface Props {
 
 export function MemberFormDialog({ open, onClose, onSaved, initial, fixedFamilyId }: Props) {
   const fixed = Boolean(fixedFamilyId) && !initial;
+  const { t } = useSettings();
   const { data: families } = useQuery({
     queryKey: ['families'],
     queryFn: listFamilies,
@@ -93,7 +96,10 @@ export function MemberFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
     setValue,
     getValues,
     formState: { errors },
-  } = useForm<FormValues>({ resolver: zodResolver(formSchema), defaultValues: emptyForm(defaultFamilyId) });
+  } = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: emptyForm(defaultFamilyId),
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -135,13 +141,16 @@ export function MemberFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
       const fam = allMembers?.filter((m) => m.familyId === familyIdValue) ?? [];
       const father = fam.find((m) => m.role === 'husband');
       const mother = fam.find((m) => m.role === 'wife');
-      if (father?.hebrewName && !getValues('fatherHebrewName')) setValue('fatherHebrewName', father.hebrewName);
-      if (mother?.hebrewName && !getValues('motherHebrewName')) setValue('motherHebrewName', mother.hebrewName);
+      if (father?.hebrewName && !getValues('fatherHebrewName'))
+        setValue('fatherHebrewName', father.hebrewName);
+      if (mother?.hebrewName && !getValues('motherHebrewName'))
+        setValue('motherHebrewName', mother.hebrewName);
     }
   }, [initial, families, allMembers, familyIdValue, roleValue, setValue, getValues]);
 
   const mutation = useMutation({
-    mutationFn: (input: MemberInput) => (initial ? updateMember(initial.id, input) : createMember(input)),
+    mutationFn: (input: MemberInput) =>
+      initial ? updateMember(initial.id, input) : createMember(input),
     onSuccess: () => {
       onSaved();
       onClose();
@@ -173,13 +182,15 @@ export function MemberFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{initial ? `Edit ${initial.firstName} ${initial.lastName}` : 'New Member'}</DialogTitle>
+      <DialogTitle>
+        {initial ? `Edit ${initial.firstName} ${initial.lastName}` : `New ${t('member')}`}
+      </DialogTitle>
       <form onSubmit={onSubmit} noValidate>
         <DialogContent dividers>
           <Stack spacing={2.5} sx={{ mt: 0.5 }}>
             {!fixed && (
               <FormControl error={Boolean(errors.familyId)}>
-                <FormLabel>Family</FormLabel>
+                <FormLabel>{t('family')}</FormLabel>
                 <Controller
                   name="familyId"
                   control={control}
@@ -255,23 +266,14 @@ export function MemberFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
                   )}
                 />
               </FormControl>
-              <FormControl sx={{ flexGrow: 1 }}>
-                <FormLabel>Role</FormLabel>
-                <Controller
-                  name="role"
-                  control={control}
-                  render={({ field }) => (
-                    <Select {...field} value={field.value ?? ''}>
-                      <MenuItem value="">—</MenuItem>
-                      <MenuItem value="husband">Husband</MenuItem>
-                      <MenuItem value="wife">Wife</MenuItem>
-                      <MenuItem value="son">Son</MenuItem>
-                      <MenuItem value="daughter">Daughter</MenuItem>
-                      <MenuItem value="other">Other</MenuItem>
-                    </Select>
-                  )}
-                />
-              </FormControl>
+              <LookupSelect
+                control={control}
+                name="role"
+                label="Role"
+                kind="memberRoles"
+                emptyLabel="—"
+                sx={{ flexGrow: 1 }}
+              />
             </Stack>
             <Stack direction="row" spacing={2}>
               <TextField
@@ -312,13 +314,15 @@ export function MemberFormDialog({ open, onClose, onSaved, initial, fixedFamilyI
                 )}
               />
             </FormControl>
-            {mutation.isError && <Alert severity="error">{(mutation.error as Error).message}</Alert>}
+            {mutation.isError && (
+              <Alert severity="error">{(mutation.error as Error).message}</Alert>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={onClose}>Cancel</Button>
           <Button type="submit" variant="contained" disabled={mutation.isPending}>
-            {initial ? 'Save changes' : 'Create member'}
+            {initial ? 'Save changes' : `Create ${t('member').toLowerCase()}`}
           </Button>
         </DialogActions>
       </form>

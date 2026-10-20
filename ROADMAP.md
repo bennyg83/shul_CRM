@@ -39,7 +39,7 @@ multi-tenant later stays possible.
 | ⚠️ MPL-2.0 (dev only, build tool) | `lightningcss` (+ platform binaries) | ✅ Removed in Phase 0 (vitest pinned to 3.x) |
 | ⚠️ CC-BY-4.0 (dev only, data) | `caniuse-lite` | Attribution-only data used by build tooling; not share-alike, not shipped. Accept |
 | ⚠️ Python-2.0 (dev only) | `argparse` (via eslint) | Permissive, not copyleft. Accept |
-| ⚠️ none declared | `@pilzno/api`, `@pilzno/web`, `@pilzno/shared` (ours) | ✅ `"UNLICENSED"` added |
+| ⚠️ none declared | `@shulcrm/api`, `@shulcrm/web`, `@shulcrm/shared` (ours) | ✅ `"UNLICENSED"` added |
 
 **Libraries planned for later phases (all checked as permissive):**
 
@@ -62,7 +62,7 @@ Avoid: SheetJS `xlsx` (the npm copy is outdated and newer builds are off-registr
 ### 2. IDs: UUIDs everywhere
 
 - **Every** record gets a UUID primary key: org, families, members, pledges, donations, important dates, notes, and later users, events, and uploads.
-- **Generator built in, no dependency:** `newId()` in `@pilzno/shared` produces **UUIDv7** (time-ordered, which keeps SQLite indexes compact and makes IDs sort by creation time). It is about 15 lines on top of `crypto.getRandomValues`, which works in Node and the browser. `crypto.randomUUID()` (v4) is the fallback.
+- **Generator built in, no dependency:** `newId()` in `@shulcrm/shared` produces **UUIDv7** (time-ordered, which keeps SQLite indexes compact and makes IDs sort by creation time). It is about 15 lines on top of `crypto.getRandomValues`, which works in Node and the browser. `crypto.randomUUID()` (v4) is the fallback.
 - zod: `id: z.string().uuid()`, and foreign keys (`familyId`, `memberId`, `pledgeId`) are validated as UUIDs too.
 - Seed data uses **fixed UUID literals**, so the seed stays deterministic and tests can reference known IDs.
 - Today's IDs (`fam-001`, `fam-lx3k…`) are replaced: a one-time migration rewrites every ID and foreign key inside one transaction. The current DB holds demo data, so a reseed works too, but the migration is the pattern real shuls will need.
@@ -119,21 +119,19 @@ and 1 test fails.
 - [x] Edit Note can change or remove the linked member.
 - [x] **Also fixed:** the Calendar page never received any dates (it now loads `/api/important-dates/occurrences`); the "Repeats annually" checkbox never showed as ticked on edit; a new Birthday was prefilled with the 13th birthday (now the birth date; bar/bat mitzvah get the Hebrew 13th/12th birthday); and clearing an optional field on edit (phone, note member, …) never saved. `PATCH` now treats `null` as "clear", for optional fields only.
 
-## Phase 2 — Configurability layer (what makes "another shul" possible)
+## Phase 2 — Configurability layer (what makes "another shul" possible) — ✅ done 2026-10-20
 
-- [ ] **Org profile in Settings:** name, short name, `orgId` (UUID, read-only), address, default currency, locale, timezone, palette, and the Adar yahrzeit custom (Adar I or Adar II).
-- [ ] **Shul logo upload in Settings:**
-  - Formats: PNG, JPEG, and WebP, max 2 MB. No SVG, because SVG can carry scripts.
-  - Preview before saving, plus "Replace" and "Remove" buttons.
-  - API: `PUT /api/org/logo` (raw image body, type and size checked server-side), `GET /api/org/logo` (served with cache headers), and `DELETE /api/org/logo`. The image is stored in the DB (one BLOB row), so a backup is still one file.
-  - Used in: the sidebar header (replacing the hard-coded "Pilzno" text), the browser-tab favicon, and later receipts, letters, emails, and the login page.
-  - When no logo is set, show the org's initials in the palette color.
-- [ ] **Lookup lists** (editable in Settings): important-date types, funds, note types, member roles, payment methods, and currencies.
-- [ ] **Terminology map** (Family → Household, etc.) with a `useTerms()` hook.
-- [ ] **Feature modules on/off:** Hebrew calendar, yahrzeits, pledges, and later events and the portal.
-- [ ] **Seed split:** a generic demo org ("Beth Shalom"); Pilzno's real data arrives by import.
-- [ ] **CSV/Excel import + export** (`papaparse`, `exceljs`), with column mapping, preview, duplicate detection, and UUIDs assigned on import.
-- [ ] Rename packages `@pilzno/*` to a neutral name.
+- [x] **Settings** (`/api/settings`, stored as one JSON value per part in a `settings` table) with five tabs: Organization, Lists, Terms, Features, Data.
+- [x] **Org profile:** name, short name, `orgId` (UUID, set on first start, never editable), address, phone, email, website, default currency, locale, time zone, two colors (the theme is built from them), and the Adar yahrzeit custom. The browser tab title follows the short name.
+- [x] **Shul logo:** PNG, JPEG or WebP up to 2 MB, checked by its first bytes on the server (SVG refused); preview, Replace and Remove; stored as one BLOB row in a `files` table. Shown in the sidebar and as the favicon; without one, the shul's initials on its color.
+- [x] **Lookup lists** editable in Settings: date types (label, color, Hebrew/English recurrence, yahrzeit or birthday rules), funds, payment methods, currencies (symbol, number format), member roles, note types. Records store a key; an item in use can be retired but not deleted; the API rejects values not in a list. Values found on old records but missing from a list are added at startup as retired items (e.g. an old `brit_mitzvah` date type).
+- [x] **Terms** (Family → Household, …) through `useSettings().t()`, used in the nav, page titles, dialogs and import.
+- [x] **Feature switches:** Hebrew calendar (off: no nightfall question, English-date recurrence), yahrzeits, pledges (off: donations only); events and portal switches are in place for Phases 3 and 6.
+- [x] **Seed split:** a fresh install is the generic "Beth Shalom" demo (profile and Springfield demo data). This install keeps its records and is named Pilzno.
+- [x] **CSV/Excel import + export:** pick a kind (families, members, pledges, donations, important dates), upload, columns are matched from the headers (editable), preview shows ready / duplicate / problem rows, then one transaction writes them with new UUIDs. Families can be created by name; missing funds and methods are added to the lists. Exports use the import headers, so a file round-trips. `papaparse` for CSV; Excel is read and written by our own small module over `fflate` (MIT). `exceljs` was rejected: a dependency of it (`buffers`) has no license at all.
+- [x] Packages renamed `@pilzno/*` → `@shulcrm/*` (root: `shul-crm`).
+- [x] **Also:** the sidebar links did a full page reload (now client-side), and on a phone there was no way to open the menu (now a menu button).
+- [ ] **Checkpoint, part 2:** import Pilzno's real data. The import is ready; it needs the files from Pilzno's current records.
 
 ## Phase 3 — Operational features (Stage 3)
 
@@ -146,7 +144,7 @@ and 1 test fails.
 
 ## Phase 4 — Hardening (core)
 
-- [ ] Real numbered migrations plus a `schema_version` table (replacing `ensureColumn`).
+- [x] Real numbered migrations plus a `schema_version` table (`apps/api/src/migrations.ts`; done early, in Phase 2).
 - [ ] Pagination, search, and sort on the list endpoints.
 - [ ] API integration tests (`supertest`); CI (install → license:check → lint → typecheck → test → build).
 - [ ] Backups: scheduled `VACUUM INTO` snapshots, plus a "download backup" button.

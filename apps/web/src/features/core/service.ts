@@ -15,10 +15,20 @@ import type {
   Pledge,
   PledgeInput,
   UpcomingDate,
-} from '@pilzno/shared';
+  Features,
+  ImportEntity,
+  ImportPreview,
+  ImportRequest,
+  ImportResult,
+  LookupKind,
+  Lookups,
+  OrgProfile,
+  Settings,
+  Terms,
+} from '@shulcrm/shared';
 
 // ---------------------------------------------------------------------------
-// API client — talks to @pilzno/api over /api/* (Vite dev proxy -> :3000).
+// API client — talks to @shulcrm/api over /api/* (Vite dev proxy -> :3000).
 // Replaces the old localStorage mock; page call sites are unchanged.
 // ---------------------------------------------------------------------------
 
@@ -237,3 +247,83 @@ export function paidForPledge(donations: readonly Donation[], pledgeId: string):
     .filter((d) => d.pledgeId === pledgeId)
     .reduce((sum, d) => sum + d.amount, 0);
 }
+
+// ---------------------------------------------------------------------------
+// Shul settings (org profile, features, terms, lists) and the logo
+// ---------------------------------------------------------------------------
+
+export function getSettings(): Promise<Settings> {
+  return request('/settings');
+}
+
+export function saveOrgProfile(input: OrgProfile): Promise<OrgProfile> {
+  return request('/settings/org', { method: 'PUT', body: JSON.stringify(input) });
+}
+
+export function saveFeatures(input: Features): Promise<Features> {
+  return request('/settings/features', { method: 'PUT', body: JSON.stringify(input) });
+}
+
+export function saveTerms(input: Terms): Promise<Terms> {
+  return request('/settings/terms', { method: 'PUT', body: JSON.stringify(input) });
+}
+
+export function saveLookup<K extends LookupKind>(kind: K, items: Lookups[K]): Promise<Lookups> {
+  return request(`/settings/lookups/${kind}`, { method: 'PUT', body: JSON.stringify(items) });
+}
+
+/** How many records use each key of a list (keys in use can be retired, not deleted). */
+export function getLookupUsage(kind: LookupKind): Promise<Record<string, number>> {
+  return request(`/settings/lookups/${kind}/usage`);
+}
+
+/** Upload the shul's logo (PNG, JPEG or WebP, max 2 MB). */
+export async function uploadLogo(file: File): Promise<Settings> {
+  let res: Response;
+  try {
+    res = await fetch(`${API}/org/logo`, { method: 'PUT', body: file, headers: { 'content-type': file.type || 'application/octet-stream' } });
+  } catch (err) {
+    throw new ApiError(0, err instanceof Error ? err.message : String(err));
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as ApiErrorBody;
+    throw new ApiError(res.status, body.error?.message ?? `Upload failed: ${res.status}`);
+  }
+  return (await res.json()) as Settings;
+}
+
+export function removeLogo(): Promise<void> {
+  return request('/org/logo', { method: 'DELETE' });
+}
+
+/** URL of the uploaded logo; the version busts the browser cache after a change. */
+export const logoUrl = (version?: string) => `${API}/org/logo${version ? `?v=${encodeURIComponent(version)}` : ''}`;
+
+// ---------------------------------------------------------------------------
+// Import / export
+// ---------------------------------------------------------------------------
+
+/** Read an uploaded CSV or Excel file into a header row and data rows (server-side). */
+export async function parseImportFile(file: File): Promise<{ headers: string[]; rows: string[][] }> {
+  let res: Response;
+  try {
+    res = await fetch(`${API}/import/parse`, { method: 'POST', body: file, headers: { 'content-type': 'application/octet-stream' } });
+  } catch (err) {
+    throw new ApiError(0, err instanceof Error ? err.message : String(err));
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as ApiErrorBody;
+    throw new ApiError(res.status, body.error?.message ?? `Could not read the file: ${res.status}`);
+  }
+  return (await res.json()) as { headers: string[]; rows: string[][] };
+}
+
+export function previewImport(entity: ImportEntity, req: ImportRequest): Promise<ImportPreview> {
+  return request(`/import/${entity}/preview`, { method: 'POST', body: JSON.stringify(req) });
+}
+
+export function commitImport(entity: ImportEntity, req: ImportRequest): Promise<ImportResult> {
+  return request(`/import/${entity}/commit`, { method: 'POST', body: JSON.stringify(req) });
+}
+
+export const exportUrl = (entity: ImportEntity, format: 'csv' | 'xlsx') => `${API}/export/${entity}?format=${format}`;

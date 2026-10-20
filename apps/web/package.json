@@ -1,9 +1,9 @@
 {
-  "name": "@pilzno/web",
+  "name": "@shulcrm/web",
   "private": true,
   "version": "0.0.1",
   "license": "UNLICENSED",
-  "description": "Pilzno Synagogue CRM — web app (React + MUI, data via @pilzno/api)",
+  "description": "Shul CRM — web app (React + MUI, data via @shulcrm/api)",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -21,7 +21,7 @@
     "@mui/icons-material": "^5.16.7",
     "@mui/material": "^5.16.7",
     "@mui/x-date-pickers": "^7.15.0",
-    "@pilzno/shared": "0.0.1",
+    "@shulcrm/shared": "0.0.1",
     "@tanstack/react-query": "^5.56.2",
     "dayjs": "^1.11.12",
     "react": "^18.3.1",

@@ -24,8 +24,8 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ImportantDate, Note } from '@pilzno/shared';
-import { formatHebrew } from '@pilzno/shared';
+import type { ImportantDate, Note } from '@shulcrm/shared';
+import { formatHebrew } from '@shulcrm/shared';
 import {
   deleteImportantDate,
   deleteMember,
@@ -36,7 +36,8 @@ import { invalidateRelated, qk } from '@/features/core/queryKeys';
 import { ImportantDateFormDialog, MemberFormDialog, NoteFormDialog } from '@/features/core/forms';
 import { Field } from '@/features/core/Field';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { DATE_TYPE_LABEL, effectiveRecurBy } from '@pilzno/shared';
+import { effectiveRecurBy } from '@shulcrm/shared';
+import { useSettings } from '@/features/settings/useSettings';
 
 
 interface Props {
@@ -48,6 +49,7 @@ interface Props {
 export function MemberDetailModal({ memberId, open, onClose }: Props) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState(0);
+  const settings = useSettings();
 
   const { data: detail, isLoading, isError, error } = useQuery({
     queryKey: qk.memberDetail(memberId),
@@ -178,10 +180,10 @@ export function MemberDetailModal({ memberId, open, onClose }: Props) {
                       <TableBody>
                         {dates.map((d) => (
                           <TableRow key={d.id} hover>
-                            <TableCell>{DATE_TYPE_LABEL[d.type]}</TableCell>
+                            <TableCell>{settings.dateType(d.type).label}</TableCell>
                             <TableCell>{d.date}</TableCell>
                             <TableCell>{d.hebrewDay && d.hebrewMonth && d.hebrewYear ? formatHebrew(d.hebrewDay, d.hebrewMonth, d.hebrewYear) : '—'}</TableCell>
-                            <TableCell>{d.recurring ? (effectiveRecurBy(d) === 'hebrew' ? 'Hebrew date' : 'English date') : '—'}</TableCell>
+                            <TableCell>{d.recurring ? (effectiveRecurBy(d, settings.recurrence) === 'hebrew' ? 'Hebrew date' : 'English date') : '—'}</TableCell>
                             <TableCell align="right">
                               <IconButton
                                 size="small"

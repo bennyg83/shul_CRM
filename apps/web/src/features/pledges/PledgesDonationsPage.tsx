@@ -24,7 +24,7 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CURRENCIES, formatMoney, type Currency, type Donation, type Pledge } from '@pilzno/shared';
+import type { Donation, Pledge } from '@shulcrm/shared';
 import {
   deleteDonation,
   deletePledge,
@@ -36,33 +36,31 @@ import {
 import { invalidateRelated, qk } from '@/features/core/queryKeys';
 import { DonationFormDialog, PledgeFormDialog } from '@/features/core/forms';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { palette } from '@/app/theme';
+import { useSettings } from '@/features/settings/useSettings';
+
 
 const PLEDGE_TYPE: Record<NonNullable<Pledge['type']>, string> = {
   annual: 'Annual',
   one_time: 'One-time',
 };
 
-const DONATION_METHOD: Record<Donation['method'], string> = {
-  cash: 'Cash',
-  check: 'Check',
-  credit: 'Credit',
-  transfer: 'Transfer',
-};
-
 // Per-currency totals so mixed-currency KPIs don't add apples and oranges.
-const moneyBreakdown = <T extends { currency: Currency }>(items: readonly T[], valueOf: (t: T) => number) => {
-  const totals: Record<Currency, number> = { USD: 0, AUD: 0, GBP: 0, NIS: 0 };
-  for (const it of items) totals[it.currency] += valueOf(it);
-  const parts = CURRENCIES.map((c) => (totals[c] > 0 ? formatMoney(totals[c], c) : null)).filter(
-    (s): s is string => s !== null,
-  );
-  return parts.length > 0 ? parts.join('   ·   ') : '—';
+const totalsByCurrency = <T extends { currency: string }>(items: readonly T[], valueOf: (t: T) => number) => {
+  const totals: Record<string, number> = {};
+  for (const it of items) totals[it.currency] = (totals[it.currency] ?? 0) + valueOf(it);
+  return totals;
 };
 
 export function PledgesDonationsPage() {
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState(0);
+  const [tabChoice, setTab] = useState(0);
+  const settings = useSettings();
+  const { t, money, label } = settings;
+  const pledgesOn = settings.features.pledges;
+  // With pledges switched off there is only the donations list.
+  const tab = pledgesOn ? tabChoice : 1;
+  const moneyBreakdown = <T extends { currency: string }>(items: readonly T[], valueOf: (t: T) => number) =>
+    settings.moneyTotals(totalsByCurrency(items, valueOf));
 
   const [pledgeDialog, setPledgeDialog] = useState<{ open: boolean; initial?: Pledge }>({ open: false });
   const [donationDialog, setDonationDialog] = useState<{ open: boolean; initial?: Donation }>({ open: false });
@@ -105,9 +103,12 @@ export function PledgesDonationsPage() {
   const confirmDelete = (fn: () => Promise<unknown>, label: string) => setPendingDelete({ fn, label });
 
   const kpis = [
-    { label: 'Total pledged', value: moneyBreakdown(pledges ?? [], (p) => p.amount), hint: `${pledges?.length ?? 0} pledges, all time` },
-    { label: 'Total donated', value: moneyBreakdown(donations ?? [], (d) => d.amount), hint: `${donations?.length ?? 0} donations, all time` },
+    ...(pledgesOn
+      ? [{ label: 'Total pledged', value: moneyBreakdown(pledges ?? [], (p) => p.amount), hint: `${pledges?.length ?? 0} ${t('pledges').toLowerCase()}, all time` }]
+      : []),
+    { label: 'Total donated', value: moneyBreakdown(donations ?? [], (d) => d.amount), hint: `${donations?.length ?? 0} ${t('donations').toLowerCase()}, all time` },
     {
+      hidden: !pledgesOn,
       label: 'Open balance',
       value: moneyBreakdown((pledges ?? []).filter((p) => p.year === currentYear), (p) => Math.max(0, p.amount - pledgePaid(p.id))),
       hint: `Remaining for ${currentYear}`,
@@ -117,7 +118,7 @@ export function PledgesDonationsPage() {
       value: moneyBreakdown((donations ?? []).filter((d) => d.date.startsWith(String(currentYear))), (d) => d.amount),
       hint: `Since ${currentYear}-01-01`,
     },
-  ];
+  ].filter((k) => !('hidden' in k && k.hidden));
 
   return (
     <Box>
@@ -129,16 +130,18 @@ export function PledgesDonationsPage() {
         sx={{ mb: 3 }}
       >
         <Box>
-          <Typography variant="h5">Pledges &amp; Donations</Typography>
+          <Typography variant="h5">{pledgesOn ? `${t('pledges')} & ${t('donations')}` : t('donations')}</Typography>
           <Typography variant="body2" color="text.secondary">
-            Record pledges and track the donations paid against them.
+            {pledgesOn
+              ? `Record ${t('pledges').toLowerCase()} and track the ${t('donations').toLowerCase()} paid against them.`
+              : `Record ${t('donations').toLowerCase()}.`}
           </Typography>
         </Box>
       </Stack>
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {kpis.map((kpi) => (
-          <Grid item xs={12} sm={6} md={3} key={kpi.label}>
+          <Grid item xs={12} sm={6} md={12 / kpis.length} key={kpi.label}>
             <Card sx={{ height: '100%' }}>
               <CardContent>
                 <Typography variant="body2" color="text.secondary">
@@ -147,7 +150,7 @@ export function PledgesDonationsPage() {
                 {isLoading ? (
                   <Skeleton variant="text" width={100} />
                 ) : (
-                  <Typography variant="h4" sx={{ color: palette.purple.primary }}>
+                  <Typography variant="h4" sx={{ color: 'primary.main' }}>
                     {kpi.value}
                   </Typography>
                 )}
@@ -170,20 +173,22 @@ export function PledgesDonationsPage() {
 
       <Card>
         <CardContent>
-          <Tabs
-            value={tab}
-            onChange={(_, v) => setTab(v)}
-            sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
-          >
-            <Tab label={`Pledges (${pledges?.length ?? 0})`} />
-            <Tab label={`Donations (${donations?.length ?? 0})`} />
-          </Tabs>
+          {pledgesOn && (
+            <Tabs
+              value={tab}
+              onChange={(_, v) => setTab(v)}
+              sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+            >
+              <Tab label={`${t('pledges')} (${pledges?.length ?? 0})`} />
+              <Tab label={`${t('donations')} (${donations?.length ?? 0})`} />
+            </Tabs>
+          )}
 
           {tab === 0 && (
             <Stack spacing={2}>
               <Stack direction="row" justifyContent="flex-end">
                 <Button variant="contained" startIcon={<AddIcon />} onClick={() => setPledgeDialog({ open: true })}>
-                  Add pledge
+                  {`Add ${t('pledge').toLowerCase()}`}
                 </Button>
               </Stack>
               {pledgesLoading ? (
@@ -200,7 +205,7 @@ export function PledgesDonationsPage() {
                     <TableHead>
                       <TableRow>
                         <TableCell>Fund</TableCell>
-                        <TableCell>Family</TableCell>
+                        <TableCell>{t('family')}</TableCell>
                         <TableCell>Year</TableCell>
                         <TableCell>Type</TableCell>
                         <TableCell>Due</TableCell>
@@ -216,14 +221,14 @@ export function PledgesDonationsPage() {
                         const balance = Math.max(0, p.amount - paid);
                         return (
                           <TableRow key={p.id} hover>
-                            <TableCell>{p.fund}</TableCell>
+                            <TableCell>{label('funds', p.fund)}</TableCell>
                             <TableCell>{familyName(p.familyId)}</TableCell>
                             <TableCell>{p.year}</TableCell>
                             <TableCell>{p.type ? PLEDGE_TYPE[p.type] : '—'}</TableCell>
                             <TableCell>{p.dueDate ?? '—'}</TableCell>
-                            <TableCell align="right">{formatMoney(p.amount, p.currency)}</TableCell>
-                            <TableCell align="right">{formatMoney(paid, p.currency)}</TableCell>
-                            <TableCell align="right">{formatMoney(balance, p.currency)}</TableCell>
+                            <TableCell align="right">{money(p.amount, p.currency)}</TableCell>
+                            <TableCell align="right">{money(paid, p.currency)}</TableCell>
+                            <TableCell align="right">{money(balance, p.currency)}</TableCell>
                             <TableCell align="right">
                               <IconButton
                                 size="small"
@@ -258,7 +263,7 @@ export function PledgesDonationsPage() {
                   startIcon={<AddIcon />}
                   onClick={() => setDonationDialog({ open: true })}
                 >
-                  Add donation
+                  {`Add ${t('donation').toLowerCase()}`}
                 </Button>
               </Stack>
               {donationsLoading ? (
@@ -275,7 +280,7 @@ export function PledgesDonationsPage() {
                     <TableHead>
                       <TableRow>
                         <TableCell>Date</TableCell>
-                        <TableCell>Family</TableCell>
+                        <TableCell>{t('family')}</TableCell>
                         <TableCell>Fund</TableCell>
                         <TableCell align="right">Amount</TableCell>
                         <TableCell>Method</TableCell>
@@ -291,10 +296,10 @@ export function PledgesDonationsPage() {
                           <TableRow key={d.id} hover>
                             <TableCell>{d.date}</TableCell>
                             <TableCell>{familyName(d.familyId)}</TableCell>
-                            <TableCell>{d.fund}</TableCell>
-                            <TableCell align="right">{formatMoney(d.amount, d.currency)}</TableCell>
-                            <TableCell>{DONATION_METHOD[d.method]}</TableCell>
-                            <TableCell>{linked ? `${linked.fund} ${linked.year}` : '—'}</TableCell>
+                            <TableCell>{label('funds', d.fund)}</TableCell>
+                            <TableCell align="right">{money(d.amount, d.currency)}</TableCell>
+                            <TableCell>{label('paymentMethods', d.method)}</TableCell>
+                            <TableCell>{linked ? `${label('funds', linked.fund)} ${linked.year}` : '—'}</TableCell>
                             <TableCell>{d.note ?? '—'}</TableCell>
                             <TableCell align="right">
                               <IconButton
@@ -336,7 +341,6 @@ export function PledgesDonationsPage() {
         onSaved={onSaved}
         initial={donationDialog.initial}
         pledges={pledges}
-        defaultFund="General"
       />
       <ConfirmDialog
         open={pendingDelete !== null}

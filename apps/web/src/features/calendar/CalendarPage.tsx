@@ -4,17 +4,15 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useQuery } from '@tanstack/react-query';
 import {
-  DATE_TYPE_COLOR,
-  DATE_TYPE_LABEL,
-  IMPORTANT_DATE_TYPES,
   formatHebrew,
   gregorianToHebrew,
   hebrewMonthName,
   type UpcomingDate,
-} from '@pilzno/shared';
+} from '@shulcrm/shared';
 import { listDateOccurrences } from '@/features/core/service';
 import { qk } from '@/features/core/queryKeys';
 import { MemberDetailModal } from '@/features/members/MemberDetailModal';
+import { useSettings } from '@/features/settings/useSettings';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -43,6 +41,7 @@ export function CalendarPage() {
   const from = iso(year, month, 1);
   const to = iso(year, month, daysInMonth);
   const [memberId, setMemberId] = useState<string | null>(null);
+  const settings = useSettings();
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: qk.occurrences(from, to),
@@ -147,7 +146,7 @@ export function CalendarPage() {
                   {items.map((o) => (
                     <Tooltip
                       key={`${o.id}-${o.nextOccurrence}`}
-                      title={`${DATE_TYPE_LABEL[o.type]}: ${o.memberName} (${o.familyName}), ${RECUR_NOTE[o.recurBy]}`}
+                      title={`${settings.dateType(o.type).label}: ${o.memberName} (${o.familyName}), ${RECUR_NOTE[o.recurBy]}`}
                     >
                       <Box
                         component="button"
@@ -160,7 +159,7 @@ export function CalendarPage() {
                           px: 0.5,
                           border: 0,
                           borderRadius: 0.5,
-                          bgcolor: DATE_TYPE_COLOR[o.type],
+                          bgcolor: settings.dateType(o.type).color,
                           color: '#fff',
                           font: 'inherit',
                           fontSize: 11,
@@ -182,11 +181,11 @@ export function CalendarPage() {
           </Box>
 
           <Stack direction="row" flexWrap="wrap" gap={2} sx={{ mt: 2 }}>
-            {IMPORTANT_DATE_TYPES.map((type) => (
-              <Stack key={type} direction="row" alignItems="center" spacing={0.5}>
-                <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: DATE_TYPE_COLOR[type] }} />
+            {settings.dateTypeOptions().map((type) => (
+              <Stack key={type.key} direction="row" alignItems="center" spacing={0.5}>
+                <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: type.color }} />
                 <Typography variant="caption" color="text.secondary">
-                  {DATE_TYPE_LABEL[type]}
+                  {type.label}
                 </Typography>
               </Stack>
             ))}

@@ -1,5 +1,5 @@
 {
-  "name": "@pilzno/api",
+  "name": "@shulcrm/api",
   "version": "0.0.1",
   "license": "UNLICENSED",
   "private": true,
@@ -13,13 +13,16 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@pilzno/shared": "0.0.1",
+    "@shulcrm/shared": "0.0.1",
     "express": "^4.21.2",
+    "fflate": "^0.8.2",
+    "papaparse": "^5.7.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^24.0.0",
+    "@types/papaparse": "^5.5.2",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "eslint": "^8.57.0",

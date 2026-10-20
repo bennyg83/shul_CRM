@@ -5,31 +5,35 @@ import { AppShell } from './layout/AppShell';
 
 // Route-level code splitting: each page is its own chunk, loaded on navigation.
 // Pages use named exports, so we adapt them to the default export React.lazy expects.
-const DashboardPage = lazy(
-  () => import('@/features/dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage })),
+const DashboardPage = lazy(() =>
+  import('@/features/dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage })),
 );
-const FamiliesPage = lazy(
-  () => import('@/features/families/FamiliesPage').then((m) => ({ default: m.FamiliesPage })),
+const FamiliesPage = lazy(() =>
+  import('@/features/families/FamiliesPage').then((m) => ({ default: m.FamiliesPage })),
 );
-const MembersPage = lazy(
-  () => import('@/features/members/MembersPage').then((m) => ({ default: m.MembersPage })),
+const MembersPage = lazy(() =>
+  import('@/features/members/MembersPage').then((m) => ({ default: m.MembersPage })),
 );
-const PledgesDonationsPage = lazy(
-  () => import('@/features/pledges/PledgesDonationsPage').then((m) => ({ default: m.PledgesDonationsPage })),
+const PledgesDonationsPage = lazy(() =>
+  import('@/features/pledges/PledgesDonationsPage').then((m) => ({
+    default: m.PledgesDonationsPage,
+  })),
 );
-const SettingsPage = lazy(
-  () => import('@/features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
+const SettingsPage = lazy(() =>
+  import('@/features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
-const CalendarPage = lazy(
-  () => import('@/features/calendar/CalendarPage').then((m) => ({ default: m.CalendarPage })),
+const CalendarPage = lazy(() =>
+  import('@/features/calendar/CalendarPage').then((m) => ({ default: m.CalendarPage })),
 );
-const UpcomingDatesPage = lazy(
-  () => import('@/features/dates/UpcomingDatesPage').then((m) => ({ default: m.UpcomingDatesPage })),
+const UpcomingDatesPage = lazy(() =>
+  import('@/features/dates/UpcomingDatesPage').then((m) => ({ default: m.UpcomingDatesPage })),
 );
 
 function RouteFallback() {
   return (
-    <Box sx={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <Box
+      sx={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+    >
       <CircularProgress />
     </Box>
   );

@@ -29,7 +29,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
-import type { Family, FamilyInput } from '@pilzno/shared';
+import type { Family, FamilyInput } from '@shulcrm/shared';
 import {
   createFamily,
   deleteFamily,
@@ -38,6 +38,7 @@ import {
 } from '@/features/core/service';
 import { FamilyDetailModal } from './FamilyDetailModal';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { useSettings } from '@/features/settings/useSettings';
 const formSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   hebrewName: z.string().optional().or(z.literal('')),
@@ -67,6 +68,7 @@ const emptyForm: FormValues = {
 export function FamiliesPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const { t } = useSettings();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<Family | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -164,19 +166,19 @@ export function FamiliesPage() {
         sx={{ mb: 3 }}
       >
         <Box>
-          <Typography variant="h5">Families</Typography>
+          <Typography variant="h5">{t('families')}</Typography>
           <Typography variant="body2" color="text.secondary">
-            Family records, contact details, and status.
+            {`${t('family')} records, contact details, and status.`}
           </Typography>
         </Box>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-          New Family
+          {`New ${t('family')}`}
         </Button>
       </Stack>
 
       <TextField
         size="small"
-        placeholder="Search families…"
+        placeholder={`Search ${t('families').toLowerCase()}…`}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} /> }}
@@ -199,7 +201,9 @@ export function FamiliesPage() {
         <Card sx={{ mb: 2 }}>
           <CardContent>
             <Typography variant="body2" color="text.secondary">
-              {search ? 'No families match your search.' : 'No families yet — create the first one.'}
+              {search
+                ? `No ${t('families').toLowerCase()} match your search.`
+                : `No ${t('families').toLowerCase()} yet — create the first one.`}
             </Typography>
           </CardContent>
         </Card>
@@ -277,19 +281,19 @@ export function FamiliesPage() {
       <Drawer anchor="right" open={drawerOpen} onClose={closeDrawer}>
         <Box sx={{ width: { xs: '100%', sm: 440 }, p: 3 }}>
           <Typography variant="h6" sx={{ mb: 3 }}>
-            {editing ? `Edit ${editing.name}` : 'New Family'}
+            {editing ? `Edit ${editing.name}` : `New ${t('family')}`}
           </Typography>
           <form onSubmit={onSubmit} noValidate>
             <Stack spacing={2.5}>
               <TextField
-                label="Family name"
+                label={`${t('family')} name`}
                 required
                 error={Boolean(errors.name)}
                 helperText={errors.name?.message}
                 {...register('name')}
               />
               <TextField
-                label="Family name in Hebrew (שם בעברית)"
+                label={`${t('family')} name in Hebrew (שם בעברית)`}
                 inputProps={{ dir: 'rtl' }}
                 {...register('hebrewName')}
               />

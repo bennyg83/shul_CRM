@@ -13,8 +13,8 @@ import {
   occurrencesBetween,
   yahrzeitInYear,
   type RecurringDate,
-} from '@pilzno/shared';
-import { seedImportantDates } from '@pilzno/shared/seed';
+} from '@shulcrm/shared';
+import { seedImportantDates } from '@shulcrm/shared/seed';
 
 // Year facts used below (from the calendar module, which is checked against known dates):
 // 5784 leap (383 days, short Cheshvan and Kislev), 5785 355 days (both 30), 5786 354 (Cheshvan 29,

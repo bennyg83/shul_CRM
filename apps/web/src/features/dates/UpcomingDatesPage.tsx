@@ -16,9 +16,9 @@ import {
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { listUpcomingDates } from '@/features/core/service';
-import { formatHebrew, type UpcomingDate } from '@pilzno/shared';
+import { formatHebrew, type UpcomingDate } from '@shulcrm/shared';
 import { qk } from '@/features/core/queryKeys';
-import { DATE_TYPE_LABEL } from '@pilzno/shared';
+import { useSettings } from '@/features/settings/useSettings';
 
 
 const REPEATS: Record<UpcomingDate['recurBy'], string> = {
@@ -53,6 +53,7 @@ function daysLabel(daysUntil: number): string {
 
 export function UpcomingDatesPage() {
   const [days, setDays] = useState<number>(90);
+  const settings = useSettings();
   const { data, isLoading, isError, error } = useQuery({
     queryKey: qk.upcoming(days),
     queryFn: () => listUpcomingDates(days),
@@ -110,7 +111,7 @@ export function UpcomingDatesPage() {
                   <TableCell>Date</TableCell>
                   <TableCell>When</TableCell>
                   <TableCell>Member</TableCell>
-                  <TableCell>Family</TableCell>
+                  <TableCell>{settings.t('family')}</TableCell>
                   <TableCell>Type</TableCell>
                   <TableCell>Hebrew date</TableCell>
                   <TableCell>Repeats</TableCell>
@@ -123,7 +124,7 @@ export function UpcomingDatesPage() {
                     <TableCell>{daysLabel(d.daysUntil)}</TableCell>
                     <TableCell>{d.memberName}</TableCell>
                     <TableCell>{d.familyName}</TableCell>
-                    <TableCell>{DATE_TYPE_LABEL[d.type]}</TableCell>
+                    <TableCell>{settings.dateType(d.type).label}</TableCell>
                     <TableCell>
                       {formatHebrew(d.occurrenceHebrew.day, d.occurrenceHebrew.month, d.occurrenceHebrew.year)}
                     </TableCell>

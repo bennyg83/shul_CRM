@@ -22,7 +22,7 @@ import {
   monthsInHebrewYear,
   type HebrewDate,
 } from './hebrewCalendar.ts';
-import { DEFAULT_RECUR_BY, type ImportantDateType, type RecurBy } from './dateTypes.ts';
+import { DEFAULT_RECUR_BY, type RecurBy } from './dateTypes.ts';
 
 /**
  * Someone who died in Adar of a regular year: in a leap year, is the yahrzeit kept in
@@ -31,13 +31,32 @@ import { DEFAULT_RECUR_BY, type ImportantDateType, type RecurBy } from './dateTy
  */
 export type AdarYahrzeitRule = 'adar1' | 'adar2';
 
+/** How one date type recurs (from the shul's date-types list). */
+export interface DateTypeRules {
+  key: string;
+  recurBy: RecurBy;
+  rules: 'yahrzeit' | 'anniversary';
+}
+
 export interface RecurrenceOptions {
   adarYahrzeit?: AdarYahrzeitRule;
+  /** The shul's date types; built-in defaults are used for any type not listed. */
+  dateTypes?: readonly DateTypeRules[];
+  /** With the Hebrew calendar switched off, everything repeats on the English date. */
+  hebrewCalendar?: boolean;
+}
+
+function typeRules(type: string, options: RecurrenceOptions): Omit<DateTypeRules, 'key'> {
+  const listed = options.dateTypes?.find((t) => t.key === type);
+  if (listed) return listed;
+  const recurBy = (DEFAULT_RECUR_BY as Record<string, RecurBy | undefined>)[type] ?? 'gregorian';
+  return { recurBy, rules: type === 'yahrzeit' ? 'yahrzeit' : 'anniversary' };
 }
 
 /** The fields of an important date that decide when it recurs. */
 export interface RecurringDate {
-  type: ImportantDateType;
+  /** Key from the date-types list. */
+  type: string;
   date: string;
   afterNightfall?: boolean;
   hebrewDay?: number;
@@ -113,8 +132,9 @@ export function hebrewAnniversaryInYear(original: HebrewDate, year: number): str
 }
 
 /** How a date repeats: its own choice, else its type's default. */
-export function effectiveRecurBy(date: Pick<RecurringDate, 'type' | 'recurBy'>): RecurBy {
-  return date.recurBy ?? DEFAULT_RECUR_BY[date.type];
+export function effectiveRecurBy(date: Pick<RecurringDate, 'type' | 'recurBy'>, options: RecurrenceOptions = {}): RecurBy {
+  if (options.hebrewCalendar === false) return 'gregorian';
+  return date.recurBy ?? typeRules(date.type, options).recurBy;
 }
 
 /** The Hebrew date of the original event: the stored one, else computed (nightfall-aware). */
@@ -128,7 +148,7 @@ export function hebrewDateOf(date: RecurringDate): HebrewDate {
 /** The occurrence of `date` in Hebrew year `year` (Hebrew recurrence only). */
 function hebrewOccurrence(date: RecurringDate, original: HebrewDate, year: number, options: RecurrenceOptions): string {
   if (year === original.year) return hebrewToGregorianISO(original.day, original.month, original.year);
-  return date.type === 'yahrzeit'
+  return typeRules(date.type, options).rules === 'yahrzeit'
     ? yahrzeitInYear(original, year, options)
     : hebrewAnniversaryInYear(original, year);
 }
@@ -155,7 +175,7 @@ export function occurrencesBetween(
   if (!date.recurring) return date.date >= from && date.date <= to ? [date.date] : [];
 
   const out: string[] = [];
-  if (effectiveRecurBy(date) === 'hebrew') {
+  if (effectiveRecurBy(date, options) === 'hebrew') {
     // The Gregorian day of the Hebrew event (after nightfall = the evening before the Hebrew day).
     const original = hebrewDateOf(date);
     const first = Math.max(original.year, gregorianToHebrew(from).year - 1);

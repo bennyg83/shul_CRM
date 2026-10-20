@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { UUID_PATTERN } from './ids.ts';
-import { IMPORTANT_DATE_TYPES, RECUR_BY, type RecurBy } from './dateTypes.ts';
+import { RECUR_BY, type RecurBy } from './dateTypes.ts';
 import type { HebrewDate } from './hebrewCalendar.ts';
 
 /** Record IDs and foreign keys are UUIDs (generated with newId() from ids.ts). */
@@ -35,7 +35,8 @@ export const memberSchema = z.object({
   fatherHebrewName: z.string().optional(),
   motherHebrewName: z.string().optional(),
   gender: z.enum(['male', 'female', 'other']),
-  role: z.enum(['husband', 'wife', 'son', 'daughter', 'other']).optional(),
+  /** Key from the member-roles list (Settings → Lists). */
+  role: z.string().min(1).optional(),
   birthDate: z.string().optional(),
   deathDate: z.string().optional(),
   email: z.string().email().optional(),
@@ -46,26 +47,13 @@ export const memberSchema = z.object({
   createdAt: z.string(),
 });
 
-export const CURRENCIES = ['USD', 'AUD', 'GBP', 'NIS'] as const;
-export type Currency = (typeof CURRENCIES)[number];
-export const currencySchema = z.enum(CURRENCIES).default('USD');
-export const CURRENCY_SYMBOL: Record<Currency, string> = { USD: '$', AUD: 'A$', GBP: '£', NIS: '₪' };
-export const CURRENCY_LABEL: Record<Currency, string> = {
-  USD: 'USD ($)',
-  AUD: 'AUD (A$)',
-  GBP: 'GBP (£)',
-  NIS: 'NIS (₪)',
-};
-
-const CURRENCY_LOCALE: Record<Currency, string> = { USD: 'en-US', AUD: 'en-AU', GBP: 'en-GB', NIS: 'he-IL' };
-
-/** Format an amount with its currency symbol (USD $, AUD A$, GBP £, NIS ₪). */
-export const formatMoney = (n: number, currency: Currency = 'USD') =>
-  new Intl.NumberFormat(CURRENCY_LOCALE[currency], { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
+/** Currency code from the shul's currency list (Settings → Lists); USD when unset. */
+export const currencySchema = z.string().min(1).default('USD');
 
 export const pledgeSchema = z.object({
   id: uuid(),
-  fund: z.string(),
+  /** Key from the funds list. */
+  fund: z.string().min(1),
   type: z.enum(['annual', 'one_time']).optional(),
   familyId: uuid(),
   year: z.number().int(),
@@ -77,13 +65,15 @@ export const pledgeSchema = z.object({
 
 export const donationSchema = z.object({
   id: uuid(),
-  fund: z.string(),
+  /** Key from the funds list. */
+  fund: z.string().min(1),
   familyId: uuid(),
   pledgeId: uuid().optional(),
   amount: z.number().nonnegative(),
   currency: currencySchema,
   date: z.string(),
-  method: z.enum(['cash', 'check', 'credit', 'transfer']),
+  /** Key from the payment-methods list. */
+  method: z.string().min(1),
   note: z.string().optional(),
   createdAt: z.string(),
 });
@@ -91,7 +81,8 @@ export const donationSchema = z.object({
 export const importantDateSchema = z.object({
   id: uuid(),
   memberId: uuid(),
-  type: z.enum(IMPORTANT_DATE_TYPES),
+  /** Key from the date-types list. */
+  type: z.string().min(1),
   /** Gregorian ISO date of the original event (death date for yahrzeit). */
   date: z.string(),
   /** The event happened after nightfall, so it belongs to the next Hebrew day. */
@@ -111,9 +102,8 @@ export const noteSchema = z.object({
   id: uuid(),
   familyId: uuid().optional(),
   memberId: uuid().optional(),
-  type: z
-    .enum(['general', 'pastoral', 'membership', 'lifecycle', 'donation', 'other'])
-    .optional(),
+  /** Key from the note-types list. */
+  type: z.string().min(1).optional(),
   priority: z.enum(['low', 'medium', 'high']).optional(),
   subject: z.string().optional(),
   body: z.string().min(1),

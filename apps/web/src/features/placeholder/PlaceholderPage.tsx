@@ -1,6 +1,6 @@
 import { Box, Card, CardContent, Typography } from '@mui/material';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
-import { palette } from '@/app/theme';
+
 
 interface Props {
   title: string;
@@ -16,7 +16,7 @@ export function PlaceholderPage({ title, description }: Props) {
       <Card>
         <CardContent>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <HourglassBottomIcon sx={{ color: palette.purple.medium }} />
+            <HourglassBottomIcon sx={{ color: 'primary.main' }} />
             <Box>
               <Typography variant="h6">Coming in a later stage</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
