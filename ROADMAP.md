@@ -157,13 +157,26 @@ Starts from the `wip/auth` branch, with its bugs fixed:
 - [ ] `/api/auth/login|logout|session`, an `httpOnly` session cookie, and `requireAuth` on all `/api/*`.
 - [ ] `crypto.scrypt` + salt + `timingSafeEqual`; user IDs are UUIDs.
 - [ ] First-run owner setup (env vars or a setup screen).
-- [ ] Fixed roles `owner | admin | staff | viewer` with a permission map in `shared`, enforced on the API and in the UI.
+- [ ] Fixed roles `owner | admin | staff | viewer | member` with a permission map in `shared`, enforced on the API and in the UI. A `member` user is linked to one member record and can only reach their own family (used by Phase 6).
 - [ ] Users page: invite (copyable link, or email once Phase 3 email exists), deactivate, change role.
 - [ ] `helmet`, a CORS lock-down, and login rate limiting (`express-rate-limit`).
 - [ ] `createdBy` on records plus an audit log.
-- [ ] Family portal: decide on scope after this phase.
 
-## Phase 6 — Packaging per shul
+## Phase 6 — Member portal
+
+Decided 2026-10-20: one login per adult member, edits go live, and payments happen in another system.
+
+- [ ] **Logins:** staff invite an adult member (any member with an email can be invited; staff decide who counts as adult) from the member's page. Each login is a `member` user tied to that one member record. Spouses get separate logins and see the same family.
+- [ ] **Portal app:** a separate, simple layout at `/portal` (not the staff sidebar). Members never see other families, staff notes, or Settings. The API scopes every portal route to the user's own `familyId` on the server; the UI hiding things is not the protection.
+- [ ] **My family:** edit the family's contact details (address, phone, WhatsApp, email) and its members (add and edit). Edits save immediately. Status, internal notes, and family merging stay staff-only.
+- [ ] **My dates:** add, edit, and remove the family's important dates, including the before/after-nightfall question and the Hebrew date preview.
+- [ ] **Audit trail:** every portal edit is written to the Phase 5 audit log (who, when, old → new). Staff get a "Recent member changes" list with a per-change undo.
+- [ ] **My account:** open pledges with the amount still owed, the donation history, and receipts once Phase 3 receipts exist. Read-only.
+- [ ] **Pay button:** a payment link set in Settings (the shul's own page at a processor such as a bank, PayPal, or Nedarim Plus). The link opens in a new tab; card details never reach this app. The URL template may add the amount and an opaque pledge reference, never names or emails. Staff record the payment as a donation when it arrives (a later import from the processor is optional).
+- [ ] **Sponsorships:** staff set up sponsorable items with dates and suggested amounts (Shabbat kiddush, seudah shlishit, a shiur, etc.). Members see open slots, claim one with an optional dedication ("l'ilui nishmat …"), and the claim creates a pledge for their family and appears on the calendar. One sponsor per slot unless staff allow co-sponsors; staff can release a claim.
+- [ ] Turned on or off with the Phase 2 feature-module switch.
+
+## Phase 7 — Packaging per shul
 
 - [ ] One Dockerfile (the API serves the built web app), with a volume for `data/`. Use the official `node` image; the OS packages inside it don't affect our code's license.
 - [ ] `.env.example`, a new-org setup wizard (org profile → logo → owner → import), and a README with a "deploy a new shul" guide.
@@ -180,4 +193,5 @@ Starts from the `wip/auth` branch, with its bugs fixed:
 | 3 | Receipts, notices, email, reports | Pilzno uses it for real (on a local/office machine) |
 | 4 | Hardening | CI green; backups running |
 | 5 | Login and roles | Owner invites an admin; a viewer can't edit; safe to put online |
-| 6 | Packaging | A fresh shul is up in minutes |
+| 6 | Member portal | A member logs in, fixes their address, adds a yahrzeit, sees what they owe, follows the pay link, and sponsors a kiddush; staff see each change in the audit log |
+| 7 | Packaging | A fresh shul is up in minutes |
