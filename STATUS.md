@@ -99,7 +99,7 @@ Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6
 - **Licenses**: `npm run license:check` fails on anything outside MIT/ISC/BSD/Apache-2.0/etc. (552 packages pass).
   vitest pinned to 3.x to drop MPL `lightningcss`.
 - **Local-only**: the API binds to `127.0.0.1` (override with `HOST`) until login exists.
-- **Auth work** (login, RBAC, users, family portal) is parked on branch `wip/auth` until ROADMAP Phase 5.
+- **Auth work** (login, RBAC, users, family portal) is parked on branch `wip/auth` until ROADMAP Phase 5 (login) and Phase 6 (member portal).
 
 ## Not yet done
 

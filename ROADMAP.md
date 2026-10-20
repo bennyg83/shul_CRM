@@ -1,7 +1,7 @@
 # Roadmap — Shul CRM (reference install: Pilzno)
 
 > Written 2026-10-20, revised the same day with feedback: login moved later, logo upload,
-> UUIDs, and a permissive-license-only policy.
+> UUIDs, and a permissive-license-only policy; then the member portal (Phase 6).
 > Supersedes the forward-looking parts of `plan.md`, `plan2.md`, `crm3-plan.md`.
 > `STATUS.md` remains the record of what is done; this file is what is left and in what order.
 
