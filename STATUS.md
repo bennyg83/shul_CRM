@@ -133,9 +133,16 @@ Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6
 - **Reports** (`reports.ts`, `/reports`): six reports, JSON or CSV.
 - **Tests**: 74.
 
+## Phase 4 — Hardening (2026-10-20)
+
+- **App/server split**: `apps/api/src/app.ts` builds the Express app; `index.ts` prepares data, starts backups, listens.
+- **Paged lists**: `apps/api/src/paging.ts`; web hook `features/core/usePaged.ts` (`usePaged`, `useDebounced`, `useSort`).
+- **Backups**: `apps/api/src/backups.ts` → `apps/api/data/backups/`. **Logging**: `apps/api/src/log.ts` (`LOG_LEVEL`).
+- **Checks**: `npm run check` (licenses, lint, types, 91 tests, build); CI does the same plus `npm audit`.
+
 ## Not yet done
 
-See `ROADMAP.md`. Next: Phase 4 (hardening: pagination/search, API tests + CI, backups, logging).
+See `ROADMAP.md`. Next: Phase 5 (login, users and roles).
 
 ## Commands
 

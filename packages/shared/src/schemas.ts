@@ -228,3 +228,31 @@ export const apiErrorSchema = z.object({
 });
 
 export type ApiError = z.infer<typeof apiErrorSchema>;
+
+// ---------------------------------------------------------------------------
+// Paged lists (GET /api/<list>/page?q=&sort=&order=&limit=&offset=&<filters>)
+// ---------------------------------------------------------------------------
+
+export interface Page<T> {
+  items: T[];
+  /** Rows matching the search and filters, across all pages. */
+  total: number;
+  limit: number;
+  offset: number;
+  /** Money lists: the sum of `amount` per currency over every matching row. */
+  totals?: Record<string, number>;
+}
+
+export interface PageQuery {
+  q?: string;
+  sort?: string;
+  order?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+  [filter: string]: string | number | undefined;
+}
+
+/** A pledge row in a paged list, with its family and what has been paid toward it. */
+export type PledgeRow = Pledge & { familyName: string; paid: number };
+/** A donation row in a paged list, with its family's name. */
+export type DonationRow = Donation & { familyName: string; pledgeFund?: string; pledgeYear?: number };

@@ -20,7 +20,11 @@ export const qk = {
  * Invalidate the detail queries and every top-level entity list after a mutation,
  * so the family/member modals and the pages all refetch consistent data.
  */
-export function invalidateRelated(queryClient: QueryClient, familyId?: string, memberId?: string): void {
+export function invalidateRelated(
+  queryClient: QueryClient,
+  familyId?: string,
+  memberId?: string,
+): void {
   if (familyId) void queryClient.invalidateQueries({ queryKey: qk.familyDetail(familyId) });
   if (memberId) void queryClient.invalidateQueries({ queryKey: qk.memberDetail(memberId) });
   void queryClient.invalidateQueries({ queryKey: qk.families });

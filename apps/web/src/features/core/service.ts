@@ -16,6 +16,8 @@ import type {
   PledgeInput,
   UpcomingDate,
   Features,
+  Page,
+  PageQuery,
   EmailLogEntry,
   EmailSettings,
   EmailSettingsView,
@@ -67,7 +69,8 @@ interface ApiErrorBody {
 
 /** A PATCH body: fields set to `undefined` (cleared in a form) are sent as `null`, which the API
  * reads as "clear this field". JSON.stringify would otherwise drop them and the old value would stay. */
-const patchBody = (input: object) => JSON.stringify(input, (_key, value: unknown) => (value === undefined ? null : value));
+const patchBody = (input: object) =>
+  JSON.stringify(input, (_key, value: unknown) => (value === undefined ? null : value));
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -258,13 +261,6 @@ export function resetData(): Promise<void> {
   return request('/reset', { method: 'POST', body: JSON.stringify({}) });
 }
 
-/** Total amount paid toward a specific pledge (sum of donations linked by pledgeId). */
-export function paidForPledge(donations: readonly Donation[], pledgeId: string): number {
-  return donations
-    .filter((d) => d.pledgeId === pledgeId)
-    .reduce((sum, d) => sum + d.amount, 0);
-}
-
 // ---------------------------------------------------------------------------
 // Shul settings (org profile, features, terms, lists) and the logo
 // ---------------------------------------------------------------------------
@@ -298,7 +294,11 @@ export function getLookupUsage(kind: LookupKind): Promise<Record<string, number>
 export async function uploadLogo(file: File): Promise<Settings> {
   let res: Response;
   try {
-    res = await fetch(`${API}/org/logo`, { method: 'PUT', body: file, headers: { 'content-type': file.type || 'application/octet-stream' } });
+    res = await fetch(`${API}/org/logo`, {
+      method: 'PUT',
+      body: file,
+      headers: { 'content-type': file.type || 'application/octet-stream' },
+    });
   } catch (err) {
     throw new ApiError(0, err instanceof Error ? err.message : String(err));
   }
@@ -314,17 +314,24 @@ export function removeLogo(): Promise<void> {
 }
 
 /** URL of the uploaded logo; the version busts the browser cache after a change. */
-export const logoUrl = (version?: string) => `${API}/org/logo${version ? `?v=${encodeURIComponent(version)}` : ''}`;
+export const logoUrl = (version?: string) =>
+  `${API}/org/logo${version ? `?v=${encodeURIComponent(version)}` : ''}`;
 
 // ---------------------------------------------------------------------------
 // Import / export
 // ---------------------------------------------------------------------------
 
 /** Read an uploaded CSV or Excel file into a header row and data rows (server-side). */
-export async function parseImportFile(file: File): Promise<{ headers: string[]; rows: string[][] }> {
+export async function parseImportFile(
+  file: File,
+): Promise<{ headers: string[]; rows: string[][] }> {
   let res: Response;
   try {
-    res = await fetch(`${API}/import/parse`, { method: 'POST', body: file, headers: { 'content-type': 'application/octet-stream' } });
+    res = await fetch(`${API}/import/parse`, {
+      method: 'POST',
+      body: file,
+      headers: { 'content-type': 'application/octet-stream' },
+    });
   } catch (err) {
     throw new ApiError(0, err instanceof Error ? err.message : String(err));
   }
@@ -343,7 +350,8 @@ export function commitImport(entity: ImportEntity, req: ImportRequest): Promise<
   return request(`/import/${entity}/commit`, { method: 'POST', body: JSON.stringify(req) });
 }
 
-export const exportUrl = (entity: ImportEntity, format: 'csv' | 'xlsx') => `${API}/export/${entity}?format=${format}`;
+export const exportUrl = (entity: ImportEntity, format: 'csv' | 'xlsx') =>
+  `${API}/export/${entity}?format=${format}`;
 
 // ---------------------------------------------------------------------------
 // Events and RSVPs
@@ -384,10 +392,12 @@ export function deleteRsvp(id: string): Promise<void> {
 // Documents (printed from /print/*), email, reports
 // ---------------------------------------------------------------------------
 
-export const getReceipt = (donationId: string) => request<ReceiptData>(`/documents/receipt/${donationId}`);
+export const getReceipt = (donationId: string) =>
+  request<ReceiptData>(`/documents/receipt/${donationId}`);
 export const getStatement = (familyId: string, year: number) =>
   request<StatementData>(`/documents/statement/${familyId}?year=${year}`);
-export const getStatements = (year: number) => request<StatementData[]>(`/documents/statements?year=${year}`);
+export const getStatements = (year: number) =>
+  request<StatementData[]>(`/documents/statements?year=${year}`);
 export const getYahrzeitNotices = (from: string, to: string) =>
   request<YahrzeitNotice[]>(`/documents/yahrzeits?from=${from}&to=${to}`);
 
@@ -400,8 +410,44 @@ export const saveEmailTemplates = (templates: EmailTemplate[]) =>
 export const sendEmails = (req: SendEmailRequest) =>
   request<SendEmailResult>('/email/send', { method: 'POST', body: JSON.stringify(req) });
 export const sendTestEmail = (to: string) =>
-  request<{ ok: true; testMode: boolean }>('/email/test', { method: 'POST', body: JSON.stringify({ to }) });
+  request<{ ok: true; testMode: boolean }>('/email/test', {
+    method: 'POST',
+    body: JSON.stringify({ to }),
+  });
 export const getEmailLog = () => request<EmailLogEntry[]>('/email/log');
 
-export const getReport = (key: ReportKey, year: number) => request<ReportTable>(`/reports/${key}?year=${year}`);
-export const reportCsvUrl = (key: ReportKey, year: number) => `${API}/reports/${key}?year=${year}&format=csv`;
+export const getReport = (key: ReportKey, year: number) =>
+  request<ReportTable>(`/reports/${key}?year=${year}`);
+export const reportCsvUrl = (key: ReportKey, year: number) =>
+  `${API}/reports/${key}?year=${year}&format=csv`;
+
+// ---------------------------------------------------------------------------
+// Paged lists (search, sort, filters, limit/offset), done by the API
+// ---------------------------------------------------------------------------
+
+export function getPage<T>(
+  list: 'families' | 'members' | 'pledges' | 'donations',
+  query: PageQuery,
+): Promise<Page<T>> {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(query))
+    if (v !== undefined && v !== '') params.set(k, String(v));
+  return request(`/${list}/page?${params}`);
+}
+
+// ---------------------------------------------------------------------------
+// Backups (whole-database snapshots)
+// ---------------------------------------------------------------------------
+
+export interface BackupInfo {
+  name: string;
+  size: number;
+  createdAt: string;
+}
+
+export const listBackups = () => request<BackupInfo[]>('/backups');
+export const createBackup = () => request<BackupInfo>('/backups', { method: 'POST', body: '{}' });
+export const deleteBackup = (name: string) =>
+  request<void>(`/backups/${encodeURIComponent(name)}`, { method: 'DELETE' });
+export const backupDownloadUrl = (name: string) =>
+  `${API}/backups/${encodeURIComponent(name)}/download`;

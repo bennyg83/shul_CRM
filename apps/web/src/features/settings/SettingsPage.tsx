@@ -10,6 +10,7 @@ import { ListsSettings } from './ListsSettings';
 import { FeaturesSettings, TermsSettings } from './TermsFeaturesSettings';
 import { ImportExport } from './ImportExport';
 import { EmailSettings } from './EmailSettings';
+import { Backups } from './Backups';
 
 const TABS = [
   { key: 'org', label: 'Organization' },
@@ -38,8 +39,8 @@ function DemoData() {
           Demo data
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Replace every family, member, pledge, donation, date and note with the demo set. Settings
-          (name, logo, lists) are kept. Use this only on a demo install.
+          Replace every family, member, pledge, donation, date and note with the demo set (a backup
+          is made first). Settings (name, logo, lists) are kept. Use this only on a demo install.
         </Typography>
         {resetMutation.isError && (
           <Alert severity="error" sx={{ mb: 2 }}>
@@ -107,6 +108,7 @@ export function SettingsPage() {
       {tab === 'email' && <EmailSettings />}
       {tab === 'data' && (
         <Stack spacing={2}>
+          <Backups />
           <ImportExport />
           <DemoData />
         </Stack>

@@ -18,12 +18,17 @@
     "lint": "npm run lint -w @shulcrm/api && npm run lint -w @shulcrm/web",
     "preview": "npm run preview -w @shulcrm/web",
     "start": "npm run start -w @shulcrm/api",
-    "license:check": "node scripts/license-check.mjs"
+    "license:check": "node scripts/license-check.mjs",
+    "test": "npm test -w @shulcrm/api",
+    "check": "npm run license:check && npm run lint && npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
   },
   "overrides": {
     "vite": "7.3.7"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

@@ -1,0 +1,30 @@
+# Every push and pull request: install exactly what the lockfile says, then the
+# same checks as locally (ROADMAP Phase 4): licenses, lint, types, tests, build.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # node:sqlite and running TypeScript directly both need Node 24.
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run license:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test -w @shulcrm/api
+      - run: npm run build
+      - run: npm audit --audit-level=high

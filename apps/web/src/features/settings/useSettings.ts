@@ -55,8 +55,10 @@ export function useSettings() {
         lookupOptions(lookups.dateTypes, current).filter(
           (t) => features.yahrzeits || t.rules !== 'yahrzeit' || t.key === current,
         ),
-      dateType: (key: string) => lookups.dateTypes.find((t) => t.key === key) ?? UNKNOWN_DATE_TYPE(key),
-      money: (amount: number, currency: string) => formatMoneyWith(lookups.currencies, amount, currency),
+      dateType: (key: string) =>
+        lookups.dateTypes.find((t) => t.key === key) ?? UNKNOWN_DATE_TYPE(key),
+      money: (amount: number, currency: string) =>
+        formatMoneyWith(lookups.currencies, amount, currency),
       /** Per-currency totals as one line ("$1,200 · ₪2,000"), in list order; "—" when all are zero. */
       moneyTotals: (totals: Readonly<Record<string, number>>) => {
         const order = [...lookups.currencies.map((c) => c.key), ...Object.keys(totals)];

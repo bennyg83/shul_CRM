@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Box,
@@ -17,7 +17,9 @@ import {
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
+  TableSortLabel,
   TextField,
   Typography,
 } from '@mui/material';
@@ -30,14 +32,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { Member, MemberInput } from '@shulcrm/shared';
-import {
-  createMember,
-  deleteMember,
-  listFamilies,
-  listMembers,
-  updateMember,
-} from '@/features/core/service';
+import { createMember, deleteMember, listFamilies, updateMember } from '@/features/core/service';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { useDebounced, usePaged, useSort } from '@/features/core/usePaged';
 import { useSettings } from '@/features/settings/useSettings';
 
 const formSchema = z
@@ -82,15 +79,20 @@ export function MembersPage() {
   const [editing, setEditing] = useState<Member | null>(null);
   const [toDelete, setToDelete] = useState<Member | null>(null);
 
-  const {
-    data: members,
-    isLoading,
-    isError,
-    error,
-  } = useQuery({
-    queryKey: ['members'],
-    queryFn: listMembers,
+  const [pageIndex, setPageIndex] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
+  const sort = useSort('name');
+  const q = useDebounced(search.trim());
+  useEffect(() => setPageIndex(0), [q, familyFilter, sort.key, sort.order, rowsPerPage]);
+  const { data, isLoading, isError, error } = usePaged<Member>('members', {
+    q,
+    familyId: familyFilter === 'all' ? undefined : familyFilter,
+    sort: sort.key,
+    order: sort.order,
+    limit: rowsPerPage,
+    offset: pageIndex * rowsPerPage,
   });
+  const filtered = data?.items ?? [];
   const { data: families } = useQuery({
     queryKey: ['families'],
     queryFn: listFamilies,
@@ -169,18 +171,6 @@ export function MembersPage() {
     };
     saveMutation.mutate({ id: editing?.id, input });
   });
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const nameOf = (id: string) => families?.find((f) => f.id === id)?.name ?? '';
-    return (members ?? []).filter((m) => {
-      if (familyFilter !== 'all' && m.familyId !== familyFilter) return false;
-      if (!q) return true;
-      return [m.firstName, m.lastName, m.email, nameOf(m.familyId)].some((v) =>
-        v?.toLowerCase().includes(q),
-      );
-    });
-  }, [members, search, familyFilter, families]);
 
   return (
     <Box>
@@ -263,13 +253,37 @@ export function MembersPage() {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>Name</TableCell>
+                  <TableCell sortDirection={sort.key === 'name' ? sort.order : false}>
+                    <TableSortLabel
+                      active={sort.key === 'name'}
+                      direction={sort.key === 'name' ? sort.order : 'asc'}
+                      onClick={() => sort.toggle('name')}
+                    >
+                      Name
+                    </TableSortLabel>
+                  </TableCell>
                   <TableCell>Hebrew</TableCell>
-                  <TableCell>{t('family')}</TableCell>
+                  <TableCell sortDirection={sort.key === 'family' ? sort.order : false}>
+                    <TableSortLabel
+                      active={sort.key === 'family'}
+                      direction={sort.key === 'family' ? sort.order : 'asc'}
+                      onClick={() => sort.toggle('family')}
+                    >
+                      {t('family')}
+                    </TableSortLabel>
+                  </TableCell>
                   <TableCell>Gender</TableCell>
                   <TableCell>Born</TableCell>
                   <TableCell>Contact</TableCell>
-                  <TableCell>Status</TableCell>
+                  <TableCell sortDirection={sort.key === 'status' ? sort.order : false}>
+                    <TableSortLabel
+                      active={sort.key === 'status'}
+                      direction={sort.key === 'status' ? sort.order : 'asc'}
+                      onClick={() => sort.toggle('status')}
+                    >
+                      Status
+                    </TableSortLabel>
+                  </TableCell>
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -325,6 +339,15 @@ export function MembersPage() {
               </TableBody>
             </Table>
           </TableContainer>
+          <TablePagination
+            component="div"
+            count={data?.total ?? 0}
+            page={pageIndex}
+            onPageChange={(_, p) => setPageIndex(p)}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(e) => setRowsPerPage(Number(e.target.value))}
+            rowsPerPageOptions={[25, 50, 100]}
+          />
         </Card>
       )}
 

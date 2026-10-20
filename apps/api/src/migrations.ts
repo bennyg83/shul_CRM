@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isUuid, newId } from '@shulcrm/shared';
+import { log } from './log.ts';
 
 // ---------------------------------------------------------------------------
 // Numbered schema migrations. `schema_version` holds the last one applied; each
@@ -248,7 +249,7 @@ function baseline(db: DatabaseSync): void {
         }
       }
     });
-    console.log(`[db] migrated ${legacyIds.size} legacy ids to UUIDs`);
+    log.info(`migrated ${legacyIds.size} legacy ids to UUIDs`);
   }
 }
 
@@ -376,6 +377,6 @@ export function migrate(db: DatabaseSync): void {
         throw err;
       }
     }
-    console.log(`[db] migration ${m.version} (${m.name}) applied`);
+    log.info({ version: m.version }, `migration ${m.version} (${m.name}) applied`);
   }
 }

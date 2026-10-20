@@ -9,7 +9,7 @@ import { migrate } from './migrations.ts';
 // the directory (tests point it at a throwaway database so real data is never touched).
 // ---------------------------------------------------------------------------
 
-const DATA_DIR = process.env.CRM_DATA_DIR ?? join(import.meta.dirname, '..', 'data');
+export const DATA_DIR = process.env.CRM_DATA_DIR ?? join(import.meta.dirname, '..', 'data');
 mkdirSync(DATA_DIR, { recursive: true });
 
 export const db = new DatabaseSync(join(DATA_DIR, 'crm.sqlite'));

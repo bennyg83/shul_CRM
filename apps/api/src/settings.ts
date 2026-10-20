@@ -19,6 +19,7 @@ import {
   type Terms,
 } from '@shulcrm/shared';
 import type { ZodTypeAny } from 'zod';
+import { log } from './log.ts';
 
 // ---------------------------------------------------------------------------
 // Shul settings (one JSON value per part in the `settings` table) and the logo
@@ -46,7 +47,7 @@ function read<T>(key: string, schema: ZodTypeAny, fallback: () => T): T {
   if (row) {
     const parsed = schema.safeParse(JSON.parse(row.value));
     if (parsed.success) return parsed.data as T;
-    console.warn(`[settings] stored "${key}" is invalid; using defaults`);
+    log.warn({ key }, 'stored setting is invalid; using defaults');
   }
   return fallback();
 }
@@ -198,7 +199,7 @@ export function reconcileLookups(): void {
   };
   for (const kind of LOOKUP_KINDS) {
     const added = ensureLookupKeys(kind, Object.keys(lookupUsage(kind)), { active: false, label: humanize });
-    if (added.length > 0) console.log(`[settings] added retired ${kind} for existing records: ${added.join(', ')}`);
+    if (added.length > 0) log.info({ list: kind, added: added.length }, 'added retired list items for existing records');
   }
 }
 

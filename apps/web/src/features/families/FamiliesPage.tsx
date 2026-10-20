@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Box,
@@ -17,7 +17,9 @@ import {
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
+  TableSortLabel,
   TextField,
   Typography,
 } from '@mui/material';
@@ -25,12 +27,13 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import SearchIcon from '@mui/icons-material/Search';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { Family, FamilyInput } from '@shulcrm/shared';
-import { createFamily, deleteFamily, listFamilies, updateFamily } from '@/features/core/service';
+import { createFamily, deleteFamily, updateFamily } from '@/features/core/service';
+import { useDebounced, usePaged, useSort } from '@/features/core/usePaged';
 import { FamilyDetailModal } from './FamilyDetailModal';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useSettings } from '@/features/settings/useSettings';
@@ -69,15 +72,19 @@ export function FamiliesPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<Family | null>(null);
 
-  const {
-    data: families,
-    isLoading,
-    isError,
-    error,
-  } = useQuery({
-    queryKey: ['families'],
-    queryFn: listFamilies,
+  const [pageIndex, setPageIndex] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
+  const sort = useSort('name');
+  const q = useDebounced(search.trim());
+  useEffect(() => setPageIndex(0), [q, sort.key, sort.order, rowsPerPage]);
+  const { data, isLoading, isError, error } = usePaged<Family>('families', {
+    q,
+    sort: sort.key,
+    order: sort.order,
+    limit: rowsPerPage,
+    offset: pageIndex * rowsPerPage,
   });
+  const filtered = data?.items ?? [];
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['families'] });
 
@@ -148,14 +155,6 @@ export function FamiliesPage() {
     saveMutation.mutate({ id: editing?.id, input });
   });
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return families ?? [];
-    return (families ?? []).filter((f) =>
-      [f.name, f.city, f.email, f.phone].some((v) => v?.toLowerCase().includes(q)),
-    );
-  }, [families, search]);
-
   return (
     <Box>
       <Stack
@@ -217,12 +216,36 @@ export function FamiliesPage() {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>Name</TableCell>
+                  <TableCell sortDirection={sort.key === 'name' ? sort.order : false}>
+                    <TableSortLabel
+                      active={sort.key === 'name'}
+                      direction={sort.key === 'name' ? sort.order : 'asc'}
+                      onClick={() => sort.toggle('name')}
+                    >
+                      Name
+                    </TableSortLabel>
+                  </TableCell>
                   <TableCell>Hebrew</TableCell>
-                  <TableCell>City</TableCell>
+                  <TableCell sortDirection={sort.key === 'city' ? sort.order : false}>
+                    <TableSortLabel
+                      active={sort.key === 'city'}
+                      direction={sort.key === 'city' ? sort.order : 'asc'}
+                      onClick={() => sort.toggle('city')}
+                    >
+                      City
+                    </TableSortLabel>
+                  </TableCell>
                   <TableCell>Phone</TableCell>
                   <TableCell>Email</TableCell>
-                  <TableCell>Status</TableCell>
+                  <TableCell sortDirection={sort.key === 'status' ? sort.order : false}>
+                    <TableSortLabel
+                      active={sort.key === 'status'}
+                      direction={sort.key === 'status' ? sort.order : 'asc'}
+                      onClick={() => sort.toggle('status')}
+                    >
+                      Status
+                    </TableSortLabel>
+                  </TableCell>
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -277,6 +300,15 @@ export function FamiliesPage() {
               </TableBody>
             </Table>
           </TableContainer>
+          <TablePagination
+            component="div"
+            count={data?.total ?? 0}
+            page={pageIndex}
+            onPageChange={(_, p) => setPageIndex(p)}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(e) => setRowsPerPage(Number(e.target.value))}
+            rowsPerPageOptions={[25, 50, 100]}
+          />
         </Card>
       )}
 

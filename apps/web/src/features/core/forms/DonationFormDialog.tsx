@@ -15,7 +15,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import type { Donation, DonationInput, Pledge } from '@shulcrm/shared';
@@ -103,6 +103,9 @@ export function DonationFormDialog({
     reset,
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(formSchema) });
+  // Only the chosen family's pledges can be linked.
+  const familyIdValue = useWatch({ control, name: 'familyId' });
+  const familyPledges = (pledges ?? []).filter((p) => p.familyId === familyIdValue);
 
   useEffect(() => {
     if (!open) return;
@@ -200,7 +203,7 @@ export function DonationFormDialog({
               kind="funds"
               error={errors.fund?.message}
             />
-            {settings.features.pledges && pledges && pledges.length > 0 && (
+            {settings.features.pledges && familyPledges.length > 0 && (
               <FormControl>
                 <FormLabel>{`Link to ${t('pledge').toLowerCase()} (optional)`}</FormLabel>
                 <Controller
@@ -209,7 +212,7 @@ export function DonationFormDialog({
                   render={({ field }) => (
                     <Select {...field} value={field.value ?? ''}>
                       <MenuItem value="">— Not linked —</MenuItem>
-                      {pledges.map((p) => (
+                      {familyPledges.map((p) => (
                         <MenuItem key={p.id} value={p.id}>
                           {`${settings.label('funds', p.fund)} ${p.year} — ${money(p.amount, p.currency)}`}
                         </MenuItem>

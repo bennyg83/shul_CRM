@@ -4,5 +4,8 @@ import { useSettings } from '@/features/settings/useSettings';
 export function useLongDate() {
   const { org } = useSettings();
   return (iso: string) =>
-    new Date(`${iso}T00:00:00Z`).toLocaleDateString(org.locale, { dateStyle: 'long', timeZone: 'UTC' });
+    new Date(`${iso}T00:00:00Z`).toLocaleDateString(org.locale, {
+      dateStyle: 'long',
+      timeZone: 'UTC',
+    });
 }

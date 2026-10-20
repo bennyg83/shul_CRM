@@ -53,8 +53,8 @@ multi-tenant later stays possible.
 | PDF receipts/letters | browser print (Save as PDF); `pdf-lib` would bring `pako` (Zlib) | — |
 | Email sending | `nodemailer` | MIT-0 |
 | Security headers / rate limit | `helmet`, `express-rate-limit` | MIT |
-| Logging | `pino` | MIT |
-| API tests | `supertest` | MIT |
+| Logging | `pino` (in use) | MIT |
+| API tests | `supertest` (in use) | MIT |
 | Image upload | none needed; `express.raw()` (built into Express) | — |
 
 Avoid: SheetJS `xlsx` (the npm copy is outdated and newer builds are off-registry), `kosher-zmanim` (LGPL-3.0), all `@hebcal/*` (GPL), and `hebcal` (GPL-3.0).
@@ -146,13 +146,15 @@ and 1 test fails.
 
 **Open questions (yours to decide):** server-made PDF attachments for emailed receipts would need `pako` (Zlib license) and an OFL-licensed Hebrew font approved; until then emails carry the receipt in the message body.
 
-## Phase 4 — Hardening (core)
+## Phase 4 — Hardening (core) — ✅ done 2026-10-20 (checkpoint: CI goes green on the first push)
 
 - [x] Real numbered migrations plus a `schema_version` table (`apps/api/src/migrations.ts`; done early, in Phase 2).
-- [ ] Pagination, search, and sort on the list endpoints.
-- [ ] API integration tests (`supertest`); CI (install → license:check → lint → typecheck → test → build).
-- [ ] Backups: scheduled `VACUUM INTO` snapshots, plus a "download backup" button.
-- [ ] Logging (`pino`) with no PII in the logs.
+- [x] **Pagination, search, and sort:** `GET /api/{families,members,pledges,donations}/page?q=&sort=&order=&limit=&offset=` plus filters (family, year, status, …), done in SQL with whitelisted sort keys; money lists also return per-currency totals of the whole filtered set. The Families, Members and Pledges & Donations pages use it (search, sortable columns, paging, year filter). The donation form now offers only the chosen family's pledges.
+- [x] **API integration tests** (`supertest`, `apps/api/src/http.test.ts`) over the whole app, which moved to `app.ts` so tests load it without a port. 91 tests in all.
+- [x] **CI:** `.github/workflows/ci.yml` (Node 24): `npm ci` → license:check → lint → typecheck → test → build → `npm audit --audit-level=high`. `npm run check` runs the same locally.
+- [x] **Backups:** a `VACUUM INTO` snapshot at start-up and then daily (`BACKUP_INTERVAL_HOURS`, newest `BACKUP_KEEP`=14 kept), "Back up now and download" and a list with downloads in Settings → Data, and a snapshot before every demo reset. Restore = replace `data/crm.sqlite`.
+- [x] **Logging** (`pino`, JSON lines): one line per request with the path (ids and backup names replaced by placeholders, no query strings), status and time; no bodies, names or emails; silent in tests.
+- [x] **Dependencies:** `npm audit` from 19 findings to **0**: react-router 7, Vite 7, Vitest 4, typescript-eslint 8. Vite 8 / Vitest 5 avoided because they need MPL-2.0 `lightningcss`.
 
 ## Phase 5 — Login, users and roles (moved here by request)
 
