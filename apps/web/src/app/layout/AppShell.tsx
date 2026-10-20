@@ -26,6 +26,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import CelebrationIcon from '@mui/icons-material/Celebration';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import BadgeIcon from '@mui/icons-material/Badge';
+import VolunteerActivismIcon from '@mui/icons-material/VolunteerActivism';
 import MenuIcon from '@mui/icons-material/Menu';
 import { useSettings } from '@/features/settings/useSettings';
 import { logoUrl } from '@/features/core/service';
@@ -99,6 +100,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     { label: 'Important Dates', path: '/dates', icon: <EventNoteIcon /> },
     { label: 'Calendar', path: '/calendar', icon: <CalendarMonthIcon /> },
     ...(features.events ? [{ label: 'Events', path: '/events', icon: <CelebrationIcon /> }] : []),
+    ...(features.events
+      ? [{ label: 'Sponsorships', path: '/sponsorships', icon: <VolunteerActivismIcon /> }]
+      : []),
     { label: 'Reports', path: '/reports', icon: <AssessmentIcon /> },
     ...(can('users.manage') ? [{ label: 'Users', path: '/users', icon: <BadgeIcon /> }] : []),
     // Settings holds nothing a staff member or viewer is allowed to change.

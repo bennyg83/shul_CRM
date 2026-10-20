@@ -170,19 +170,20 @@ Written fresh rather than from `wip/auth`: that branch never built, and its empt
 - [x] **Found and fixed while testing:** Express matches routes case-insensitively and builds its router on the first `app.use`, so `POST /api/RESET` reached the reset route past a permission table written in lower case. Fixed in two independent ways — the setting now precedes every `app.use`, and the permission check lower-cases the path — with the rule table also denying by default. A regression test covers five spellings.
 - [x] 110 API tests, including the whole permission matrix per role.
 
-## Phase 6 — Member portal
+## Phase 6 — Member portal — ✅ done 2026-10-21
 
-Decided 2026-10-20: one login per adult member, edits go live, and payments happen in another system.
+Built to the decisions of 2026-10-20: one login per adult member, edits go live, payments happen elsewhere.
 
-- [ ] **Logins:** staff invite an adult member (any member with an email can be invited; staff decide who counts as adult) from the member's page. Each login is a `member` user tied to that one member record. Spouses get separate logins and see the same family.
-- [ ] **Portal app:** a separate, simple layout at `/portal` (not the staff sidebar). Members never see other families, staff notes, or Settings. The API scopes every portal route to the user's own `familyId` on the server; the UI hiding things is not the protection.
-- [ ] **My family:** edit the family's contact details (address, phone, WhatsApp, email) and its members (add and edit). Edits save immediately. Status, internal notes, and family merging stay staff-only.
-- [ ] **My dates:** add, edit, and remove the family's important dates, including the before/after-nightfall question and the Hebrew date preview.
-- [ ] **Audit trail:** every portal edit is written to the Phase 5 audit log (who, when, old → new). Staff get a "Recent member changes" list with a per-change undo.
-- [ ] **My account:** open pledges with the amount still owed, the donation history, and receipts once Phase 3 receipts exist. Read-only.
-- [ ] **Pay button:** a payment link set in Settings (the shul's own page at a processor such as a bank, PayPal, or Nedarim Plus). The link opens in a new tab; card details never reach this app. The URL template may add the amount and an opaque pledge reference, never names or emails. Staff record the payment as a donation when it arrives (a later import from the processor is optional).
-- [ ] **Sponsorships:** staff set up sponsorable items with dates and suggested amounts (Shabbat kiddush, seudah shlishit, a shiur, etc.). Members see open slots, claim one with an optional dedication ("l'ilui nishmat …"), and the claim creates a pledge for their family and appears on the calendar. One sponsor per slot unless staff allow co-sponsors; staff can release a claim.
-- [ ] Turned on or off with the Phase 2 feature-module switch.
+- [x] **Logins:** staff invite a member from the Users page; the login is tied to that one member record. Spouses get their own logins and see the same family.
+- [x] **Portal app:** a member login only ever sees the portal, whatever address they type — its own simple layout, no sidebar, no office features. **Every portal route works out the family from the signed-in user's own member record; none accepts a family id from the browser.** Reaching another family's record answers 404 rather than 403, so an id is never confirmed to exist.
+- [x] **My family:** contact details, and adding or editing the people in the family. Edits save immediately. The family's name and membership status, internal notes and anything to do with money stay with the office — sending them anyway changes nothing.
+- [x] **My dates:** add, edit and remove the family's important dates, with the before/after-nightfall question and the Hebrew date each answer gives. The Hebrew date is recomputed on the server, so a stored Hebrew date can never disagree with its English one.
+- [x] **Audit trail:** every portal change is recorded with who, when and the fields that changed. Staff review them under Settings → Member changes, and can put any one back — an edit field by field, an added record removed, a deleted one restored with its original id.
+- [x] **My account:** open pledges with what is still owed, the donation history and receipt numbers. Read-only.
+- [x] **Pay button:** a payment link set in Settings → Organization, opened in a new tab. `{amount}` and `{reference}` are filled in and nothing else — no name or address is ever added to the link, and no card details reach this app.
+- [x] **Sponsorships:** staff list what can be sponsored (a kiddush, a shiur) with a date, fund, suggested amount and how many families may share it. A member claims one with an optional dedication, which **creates a pledge in the same transaction**, so a family can never hold a slot without owing for it. Releasing a claim removes its pledge, unless something has already been paid against it. They appear on the calendar, and one family never sees who else sponsored.
+- [x] Turned on and off with the Phase 2 feature switch; with it off, every portal route is refused.
+- [x] **Found and fixed while testing:** invitation and reset tokens were being written to the request log in full, so anyone who could read the logs could have taken over an account. They are now redacted.
 
 ## Phase 7 — Packaging per shul
 

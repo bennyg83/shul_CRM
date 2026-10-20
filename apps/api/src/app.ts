@@ -19,6 +19,8 @@ import {
   type ImportEntity,
   type ImportRequest,
   daysBetweenISO,
+  claimInputSchema,
+  todayISO,
   type LookupKind,
   ROLES,
   acceptInviteSchema,
@@ -48,13 +50,15 @@ import * as email from './email.ts';
 import * as reports from './reports.ts';
 import * as paging from './paging.ts';
 import * as backups from './backups.ts';
+import * as sponsorships from './sponsorships.ts';
+import * as portal from './portal.ts';
 import { readTable, writeCsv, writeXlsx } from './spreadsheet.ts';
 import { log } from './log.ts';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import * as auth from './auth.ts';
 import { currentUser, runWithUser } from './context.ts';
-import { audit, auditLog, describe, diff } from './audit.ts';
+import { audit, auditLog, describe, diff, undo as auditUndo } from './audit.ts';
 
 // ---------------------------------------------------------------------------
 // Shul CRM — the API app (Express 4 + SQLite via repo.ts): routes, validation,
@@ -75,8 +79,10 @@ app.use((req, res, next) => {
   const start = performance.now();
   res.on('finish', () => {
     // The path without its query string, with ids and backup names replaced by placeholders.
+    // An invitation or reset token is a credential, so it never reaches the log at all.
     const route = req.originalUrl
       .split('?')[0]
+      .replace(/(\/api\/auth\/token\/)[^/]+/i, '$1:token')
       .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ':id')
       .replace(/crm-[\w-]+\.sqlite/g, ':name');
     const entry = { method: req.method, route, status: res.statusCode, ms: Math.round(performance.now() - start) };
@@ -351,7 +357,13 @@ app.post('/api/users/:id/link', (req, res) => {
 });
 app.get('/api/audit', (req, res) => {
   const q = z
-    .object({ entity: z.string().optional(), entityId: z.string().optional(), before: z.string().optional(), limit: z.coerce.number().optional() })
+    .object({
+      entity: z.string().optional(),
+      entityId: z.string().optional(),
+      before: z.string().optional(),
+      limit: z.coerce.number().optional(),
+      source: z.enum(['portal']).optional(),
+    })
     .parse(req.query);
   res.json(auditLog(q));
 });
@@ -577,6 +589,91 @@ app.get('/api/backups/:name/download', (req, res, next) => {
 app.delete('/api/backups/:name', (req, res) => {
   backups.deleteBackup(req.params.name);
   audit('backup.deleted', { summary: req.params.name });
+  res.status(204).end();
+});
+
+// Sponsorships, the office side. /summary and /claims come first so they are not read as an id.
+app.get('/api/sponsorships/summary', (req, res) => {
+  const { from, to } = z.object({ from: isoDateSchema.optional(), to: isoDateSchema.optional() }).parse(req.query);
+  res.json(sponsorships.summaries(from, to));
+});
+app.delete('/api/sponsorships/claims/:id', (req, res) => {
+  sponsorships.release(req.params.id);
+  res.status(204).end();
+});
+app.get('/api/sponsorships', (_req, res) => {
+  res.json(sponsorships.sponsorships.list());
+});
+app.post('/api/sponsorships', (req, res) => {
+  const created = sponsorships.sponsorships.create(sponsorships.parseSponsorship(req.body));
+  audit('create', { entity: 'sponsorships', entityId: created.id, summary: `${created.title} on ${created.date}` });
+  res.status(201).json(created);
+});
+app.patch('/api/sponsorships/:id', (req, res) => {
+  const before = sponsorships.sponsorships.get(req.params.id);
+  if (!before) throw new repo.NotFound('No such sponsorship');
+  const after = sponsorships.sponsorships.update(req.params.id, sponsorships.parseSponsorship({ ...before, ...(req.body as object) }));
+  audit('update', { entity: 'sponsorships', entityId: after.id, summary: `${after.title} on ${after.date}`, changes: diff(before, after) });
+  res.json(after);
+});
+app.delete('/api/sponsorships/:id', (req, res) => {
+  const before = sponsorships.sponsorships.get(req.params.id);
+  if (!sponsorships.sponsorships.remove(req.params.id)) throw new repo.NotFound('No such sponsorship');
+  audit('delete', { entity: 'sponsorships', entityId: req.params.id, summary: before ? `${before.title} on ${before.date}` : req.params.id });
+  res.status(204).end();
+});
+
+// Put back one change a family made about itself.
+app.post('/api/audit/:id/undo', (req, res) => {
+  res.json(auditUndo(req.params.id));
+});
+
+// ---------------------------------------------------------------------------
+// The member portal. Every route works out the family from the signed-in
+// user's own member record; none of them accepts a family id from the browser.
+// ---------------------------------------------------------------------------
+const portalScope = (): portal.PortalScope => portal.scope(currentUser());
+
+app.get('/api/portal/home', (_req, res) => {
+  res.json(portal.home(portalScope()));
+});
+app.patch('/api/portal/family', (req, res) => {
+  res.json(portal.updateFamily(portalScope(), req.body));
+});
+app.post('/api/portal/members', (req, res) => {
+  res.status(201).json(portal.addMember(portalScope(), req.body));
+});
+app.patch('/api/portal/members/:id', (req, res) => {
+  res.json(portal.updateMember(portalScope(), req.params.id, req.body));
+});
+app.post('/api/portal/dates', (req, res) => {
+  res.status(201).json(portal.addDate(portalScope(), req.body));
+});
+app.patch('/api/portal/dates/:id', (req, res) => {
+  res.json(portal.updateDate(portalScope(), req.params.id, req.body));
+});
+app.delete('/api/portal/dates/:id', (req, res) => {
+  portal.removeDate(portalScope(), req.params.id);
+  res.status(204).end();
+});
+app.get('/api/portal/account', (_req, res) => {
+  res.json(portal.account(portalScope()));
+});
+app.get('/api/portal/sponsorships', (req, res) => {
+  const scope = portalScope();
+  const { from, to } = z.object({ from: isoDateSchema.optional(), to: isoDateSchema.optional() }).parse(req.query);
+  res.json(sponsorships.summaries(from ?? todayISO(), to, scope.family.id));
+});
+app.post('/api/portal/sponsorships/:id/claim', (req, res) => {
+  const scope = portalScope();
+  portal.mustEdit(scope);
+  res.status(201).json(sponsorships.claim(req.params.id, scope.family.id, scope.member.id, claimInputSchema.parse(req.body)));
+});
+app.delete('/api/portal/claims/:id', (req, res) => {
+  const scope = portalScope();
+  portal.mustEdit(scope);
+  // Scoped to this family, so one family can never release another's.
+  sponsorships.release(req.params.id, scope.family.id);
   res.status(204).end();
 });
 

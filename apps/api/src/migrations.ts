@@ -408,11 +408,50 @@ function usersAndAudit(db: DatabaseSync): void {
   `);
 }
 
+/** 5 — Sponsorships: what the shul offers (a kiddush, a shiur) and who has taken each one. */
+function sponsorships(db: DatabaseSync): void {
+  db.exec(`
+    CREATE TABLE sponsorships (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      date TEXT NOT NULL,
+      fund TEXT NOT NULL,
+      suggestedAmount REAL CHECK (suggestedAmount IS NULL OR suggestedAmount >= 0),
+      currency TEXT NOT NULL DEFAULT 'USD',
+      -- More than one family may share a kiddush when the shul allows it.
+      maxSponsors INTEGER NOT NULL DEFAULT 1 CHECK (maxSponsors >= 1),
+      note TEXT,
+      open INTEGER NOT NULL DEFAULT 1,
+      createdAt TEXT NOT NULL,
+      createdBy TEXT
+    );
+    CREATE INDEX idx_sponsorships_date ON sponsorships(date);
+
+    CREATE TABLE sponsorshipClaims (
+      id TEXT PRIMARY KEY,
+      sponsorshipId TEXT NOT NULL REFERENCES sponsorships(id) ON DELETE CASCADE,
+      familyId TEXT NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+      memberId TEXT REFERENCES members(id) ON DELETE SET NULL,
+      dedication TEXT,
+      amount REAL NOT NULL CHECK (amount >= 0),
+      currency TEXT NOT NULL DEFAULT 'USD',
+      -- The pledge this claim created, so the money side stays in one place.
+      pledgeId TEXT REFERENCES pledges(id) ON DELETE SET NULL,
+      createdAt TEXT NOT NULL,
+      createdBy TEXT,
+      UNIQUE (sponsorshipId, familyId)
+    );
+    CREATE INDEX idx_claims_sponsorship ON sponsorshipClaims(sponsorshipId);
+    CREATE INDEX idx_claims_family ON sponsorshipClaims(familyId);
+  `);
+}
+
 const MIGRATIONS: Migration[] = [
   { version: 1, name: 'baseline', ownTransactions: true, up: baseline },
   { version: 2, name: 'settings and files', foreignKeysOff: true, up: settingsAndFiles },
   { version: 3, name: 'events, RSVPs, email log', up: eventsAndEmail },
   { version: 4, name: 'users, sessions, audit log', up: usersAndAudit },
+  { version: 5, name: 'sponsorships', up: sponsorships },
 ];
 
 /** The schema version this code expects. */

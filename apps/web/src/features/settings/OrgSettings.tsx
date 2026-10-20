@@ -339,6 +339,28 @@ export function OrgSettings() {
                     {...register('receiptFooter')}
                   />
                 </Grid>
+                <Grid item xs={12} sm={7}>
+                  <TextField
+                    label="Payment page"
+                    fullWidth
+                    placeholder="https://…"
+                    error={Boolean(errors.paymentUrl)}
+                    helperText={
+                      errors.paymentUrl?.message ??
+                      'Your own page at your payment provider. Members are sent there to pay; nothing is taken in this app. {amount} and {reference} are filled in — no names or addresses are ever added.'
+                    }
+                    {...register('paymentUrl')}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={5}>
+                  <TextField
+                    label="Note beside the pay button"
+                    fullWidth
+                    error={Boolean(errors.paymentNote)}
+                    helperText={errors.paymentNote?.message ?? 'e.g. which reference to quote'}
+                    {...register('paymentNote')}
+                  />
+                </Grid>
                 <Grid item xs={12}>
                   <Typography variant="caption" color="text.secondary">
                     Install id: {settings.org.orgId}

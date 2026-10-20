@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { AppShell } from './layout/AppShell';
 import { AuthGate } from '@/features/auth/AuthGate';
+import { useAuth } from '@/features/auth/useAuth';
 
 // Route-level code splitting: each page is its own chunk, loaded on navigation.
 // Pages use named exports, so we adapt them to the default export React.lazy expects.
@@ -37,6 +38,12 @@ const ReportsPage = lazy(() =>
 );
 const UsersPage = lazy(() =>
   import('@/features/users/UsersPage').then((m) => ({ default: m.UsersPage })),
+);
+const PortalApp = lazy(() =>
+  import('@/features/portal/PortalApp').then((m) => ({ default: m.PortalApp })),
+);
+const SponsorshipsPage = lazy(() =>
+  import('@/features/sponsorships/SponsorshipsPage').then((m) => ({ default: m.SponsorshipsPage })),
 );
 const WelcomePage = lazy(() =>
   import('@/features/auth/WelcomePage').then((m) => ({ default: m.WelcomePage })),
@@ -80,6 +87,7 @@ function MainRoutes() {
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/sponsorships" element={<SponsorshipsPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -91,6 +99,11 @@ function MainRoutes() {
 
 /** Everything behind the sign-in screen: the printable pages and the app itself. */
 function SignedInRoutes() {
+  const { user } = useAuth();
+  // A member login only ever sees the portal: the office's app is not theirs, whatever
+  // address they type. Staff reach the portal's data through the ordinary pages instead.
+  if (user?.role === 'member') return <PortalApp />;
+
   return (
     <Routes>
       <Route path="/print/receipt/:donationId" element={<ReceiptPrint />} />

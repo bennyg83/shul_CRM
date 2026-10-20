@@ -153,9 +153,22 @@ Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6
 - **Dev login**: the local owner account's details are in `apps/api/data/dev-owner.txt` (that folder is gitignored).
 - **Tests**: 110.
 
+## Phase 6 — Member portal (2026-10-21)
+
+- **API**: `apps/api/src/portal.ts` — `scope()` resolves the family from the signed-in user's member record and
+  everything else starts from it; `sponsorships.ts` — slots, claims (each creating a pledge in one transaction) and
+  releases; `audit.ts` `undo()` puts back one portal change. Routes: `/api/portal/*` (permission `portal`),
+  `/api/sponsorships/*` (office), `POST /api/audit/:id/undo`.
+- **Shared**: `packages/shared/src/portal.ts` — what a member may change (`portalFamilySchema`,
+  `portalMemberSchema`), the portal's read models, the sponsorship schemas and `buildPaymentUrl()`.
+- **Web**: `features/portal/` (the member's app), `features/sponsorships/SponsorshipsPage.tsx`,
+  `features/settings/MemberChanges.tsx`. A `member` login is routed to the portal in `App.tsx`.
+- **Migration 5** adds `sponsorships` and `sponsorshipClaims`.
+- **Dev logins** (owner and a member, for trying the portal): `apps/api/data/dev-owner.txt`, gitignored.
+
 ## Not yet done
 
-See `ROADMAP.md`. Next: Phase 6 (member portal), then Phase 7 (packaging).
+See `ROADMAP.md`. Next: Phase 7 (packaging: Docker, the new-shul setup wizard, the deploy guide).
 
 ## Commands
 

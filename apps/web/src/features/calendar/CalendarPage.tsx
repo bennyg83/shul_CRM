@@ -17,9 +17,10 @@ import {
   gregorianToHebrew,
   hebrewMonthName,
   type EventSummary,
+  type SponsorshipSummary,
   type UpcomingDate,
 } from '@shulcrm/shared';
-import { listDateOccurrences, listEventSummaries } from '@/features/core/service';
+import { listDateOccurrences, listEventSummaries, listSponsorships } from '@/features/core/service';
 import { useNavigate } from 'react-router-dom';
 import { qk } from '@/features/core/queryKeys';
 import { MemberDetailModal } from '@/features/members/MemberDetailModal';
@@ -76,6 +77,18 @@ export function CalendarPage() {
     queryFn: () => listEventSummaries(from, to),
     enabled: settings.features.events,
   });
+  // Sponsorships sit on the calendar so the office can see at a glance which kiddushim are spoken for.
+  const { data: monthSponsorships } = useQuery({
+    queryKey: ['sponsorships', 'summary', from, to],
+    queryFn: () => listSponsorships(from, to),
+    enabled: settings.features.events,
+  });
+  const sponsorshipsByDay = useMemo(() => {
+    const map = new Map<string, SponsorshipSummary[]>();
+    for (const s of monthSponsorships ?? []) map.set(s.date, [...(map.get(s.date) ?? []), s]);
+    return map;
+  }, [monthSponsorships]);
+
   const eventsByDay = useMemo(() => {
     const map = new Map<string, EventSummary[]>();
     for (const e of monthEvents ?? []) map.set(e.date, [...(map.get(e.date) ?? []), e]);
@@ -163,6 +176,7 @@ export function CalendarPage() {
               const hebrew = gregorianToHebrew(dayIso);
               const items = byDay.get(dayIso) ?? [];
               const dayEvents = eventsByDay.get(dayIso) ?? [];
+              const daySponsorships = sponsorshipsByDay.get(dayIso) ?? [];
               return (
                 <Box
                   key={dayIso}
@@ -172,7 +186,10 @@ export function CalendarPage() {
                     borderColor: dayIso === todayIso ? 'primary.main' : 'divider',
                     borderRadius: 1,
                     p: 0.5,
-                    bgcolor: items.length + dayEvents.length > 0 ? 'action.hover' : undefined,
+                    bgcolor:
+                      items.length + dayEvents.length + daySponsorships.length > 0
+                        ? 'action.hover'
+                        : undefined,
                     overflow: 'hidden',
                   }}
                 >
@@ -190,6 +207,44 @@ export function CalendarPage() {
                         : hebrew.day}
                     </Typography>
                   </Stack>
+                  {daySponsorships.map((s) => (
+                    <Tooltip
+                      key={s.id}
+                      title={`${s.title}: ${
+                        s.remaining === 0
+                          ? 'taken'
+                          : `${s.remaining} of ${s.maxSponsors} still free`
+                      }${s.claims.length > 0 ? ` — ${s.claims.map((c) => c.familyName ?? 'a family').join(', ')}` : ''}`}
+                    >
+                      <Box
+                        component="button"
+                        type="button"
+                        onClick={() => navigate('/sponsorships')}
+                        sx={{
+                          display: 'block',
+                          width: '100%',
+                          mt: 0.25,
+                          px: 0.5,
+                          border: 1,
+                          borderStyle: s.remaining === 0 ? 'solid' : 'dashed',
+                          borderColor: 'secondary.main',
+                          borderRadius: 0.5,
+                          bgcolor: s.remaining === 0 ? 'secondary.main' : 'background.paper',
+                          color: s.remaining === 0 ? 'common.white' : 'secondary.main',
+                          font: 'inherit',
+                          fontSize: 11,
+                          lineHeight: 1.5,
+                          textAlign: 'left',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {s.title}
+                      </Box>
+                    </Tooltip>
+                  ))}
                   {dayEvents.map((e) => (
                     <Tooltip
                       key={e.id}

@@ -45,6 +45,16 @@ import type {
   Settings,
   Terms,
   AuditEntry,
+  ClaimInput,
+  PortalAccount,
+  PortalDateInput,
+  PortalFamilyInput,
+  PortalHome,
+  PortalMemberInput,
+  Sponsorship,
+  SponsorshipClaim,
+  SponsorshipInput,
+  SponsorshipSummary,
   Role,
   Session,
   User,
@@ -498,8 +508,61 @@ export const updateUser = (id: string, patch: { role?: Role; status?: 'active' |
 export const newUserLink = (id: string) =>
   request<{ user: User; link: string; purpose: 'invite' | 'reset' }>(`/users/${id}/link`, { method: 'POST', body: '{}' });
 
-export const getAuditLog = (query: { entity?: string; entityId?: string; before?: string; limit?: number } = {}) => {
+export const getAuditLog = (
+  query: { entity?: string; entityId?: string; before?: string; limit?: number; source?: 'portal' } = {},
+) => {
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(query)) if (v !== undefined && v !== '') params.set(k, String(v));
   return request<AuditEntry[]>(`/audit${params.size ? `?${params}` : ''}`);
 };
+
+// ---------------------------------------------------------------------------
+// Sponsorships (the office side)
+// ---------------------------------------------------------------------------
+
+export const listSponsorships = (from?: string, to?: string) => {
+  const params = new URLSearchParams();
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  return request<SponsorshipSummary[]>(`/sponsorships/summary${params.size ? `?${params}` : ''}`);
+};
+export const createSponsorship = (input: SponsorshipInput) =>
+  request<Sponsorship>('/sponsorships', { method: 'POST', body: JSON.stringify(input) });
+export const updateSponsorship = (id: string, input: Partial<SponsorshipInput>) =>
+  request<Sponsorship>(`/sponsorships/${id}`, { method: 'PATCH', body: patchBody(input) });
+export const deleteSponsorship = (id: string) => request<void>(`/sponsorships/${id}`, { method: 'DELETE' });
+/** Release a claim as the office (the portal has its own, family-scoped version). */
+export const releaseClaim = (claimId: string) =>
+  request<void>(`/sponsorships/claims/${claimId}`, { method: 'DELETE' });
+
+/** Put back one change a family made about itself. */
+export const undoChange = (auditId: string) =>
+  request<{ action: string; entity: string }>(`/audit/${auditId}/undo`, { method: 'POST', body: '{}' });
+
+// ---------------------------------------------------------------------------
+// The member portal. The API works out which family from the signed-in user,
+// so none of these takes a family id.
+// ---------------------------------------------------------------------------
+
+export const getPortalHome = () => request<PortalHome>('/portal/home');
+export const savePortalFamily = (input: PortalFamilyInput) =>
+  request<Family>('/portal/family', { method: 'PATCH', body: patchBody(input) });
+export const addPortalMember = (input: PortalMemberInput) =>
+  request<Member>('/portal/members', { method: 'POST', body: JSON.stringify(input) });
+export const savePortalMember = (id: string, input: Partial<PortalMemberInput>) =>
+  request<Member>(`/portal/members/${id}`, { method: 'PATCH', body: patchBody(input) });
+export const addPortalDate = (input: PortalDateInput) =>
+  request<ImportantDate>('/portal/dates', { method: 'POST', body: JSON.stringify(input) });
+export const savePortalDate = (id: string, input: PortalDateInput) =>
+  request<ImportantDate>(`/portal/dates/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+export const deletePortalDate = (id: string) => request<void>(`/portal/dates/${id}`, { method: 'DELETE' });
+export const getPortalAccount = () => request<PortalAccount>('/portal/account');
+export const listPortalSponsorships = (from?: string, to?: string) => {
+  const params = new URLSearchParams();
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  return request<SponsorshipSummary[]>(`/portal/sponsorships${params.size ? `?${params}` : ''}`);
+};
+export const claimSponsorship = (id: string, input: ClaimInput) =>
+  request<SponsorshipClaim>(`/portal/sponsorships/${id}/claim`, { method: 'POST', body: JSON.stringify(input) });
+export const releaseMyClaim = (claimId: string) => request<void>(`/portal/claims/${claimId}`, { method: 'DELETE' });

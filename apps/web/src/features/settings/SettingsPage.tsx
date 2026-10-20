@@ -12,7 +12,9 @@ import { ImportExport } from './ImportExport';
 import { EmailSettings } from './EmailSettings';
 import { Backups } from './Backups';
 import { AuditLog } from './AuditLog';
+import { MemberChanges } from './MemberChanges';
 import { useAuth } from '@/features/auth/useAuth';
+import { useSettings } from './useSettings';
 
 const TABS = [
   { key: 'org', label: 'Organization' },
@@ -21,6 +23,7 @@ const TABS = [
   { key: 'features', label: 'Features' },
   { key: 'email', label: 'Email' },
   { key: 'data', label: 'Data' },
+  { key: 'portal', label: 'Member changes' },
   { key: 'activity', label: 'Activity' },
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
@@ -85,7 +88,13 @@ function DemoData() {
 export function SettingsPage() {
   const [params, setParams] = useSearchParams();
   const { can } = useAuth();
-  const tabs = TABS.filter((t) => t.key !== 'activity' || can('audit.read'));
+  const { features } = useSettings();
+  // Both of these read the audit log, and the portal tab is pointless with the portal switched off.
+  const tabs = TABS.filter(
+    (t) =>
+      (t.key !== 'activity' || can('audit.read')) &&
+      (t.key !== 'portal' || (can('audit.read') && features.portal)),
+  );
   const tab: TabKey = tabs.some((t) => t.key === params.get('tab'))
     ? (params.get('tab') as TabKey)
     : 'org';
@@ -118,6 +127,7 @@ export function SettingsPage() {
           {can('data.reset') && <DemoData />}
         </Stack>
       )}
+      {tab === 'portal' && <MemberChanges />}
       {tab === 'activity' && <AuditLog />}
     </Box>
   );

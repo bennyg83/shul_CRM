@@ -53,6 +53,13 @@ const ACTION_LABEL: Record<string, string> = {
   'backup.deleted': 'Deleted a backup',
   import: 'Imported records',
   'data.reset': 'Reset the data',
+  // A family changing its own details through the member portal.
+  'portal.create': 'Added (member portal)',
+  'portal.update': 'Changed (member portal)',
+  'portal.delete': 'Deleted (member portal)',
+  'sponsorship.claimed': 'Took on a sponsorship',
+  'sponsorship.released': 'Gave back a sponsorship',
+  undo: 'Put a change back',
 };
 
 /** Entities worth offering in the filter, whether or not this page has loaded one yet. */
@@ -64,6 +71,7 @@ const ENTITIES = [
   'importantDates',
   'notes',
   'events',
+  'sponsorships',
   'users',
 ] as const;
 
@@ -71,6 +79,7 @@ const FIXED_ENTITY_WORD: Record<string, string> = {
   importantDates: 'important date',
   notes: 'note',
   events: 'event',
+  sponsorships: 'sponsorship',
   users: 'user',
   dateTypes: 'date type',
   funds: 'fund',

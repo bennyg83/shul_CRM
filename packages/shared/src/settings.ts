@@ -11,6 +11,7 @@
 import { z } from 'zod';
 import { RECUR_BY, DATE_TYPE_COLOR, DATE_TYPE_LABEL, DEFAULT_RECUR_BY, IMPORTANT_DATE_TYPES } from './dateTypes.ts';
 import { UUID_PATTERN } from './ids.ts';
+import { paymentUrlSchema } from './portal.ts';
 
 const hexColor = z.string().regex(/^#[0-9a-f]{6}$/i, 'Use a color like #4A148C');
 
@@ -39,6 +40,11 @@ export const orgProfileSchema = z.object({
   taxId: z.string().optional(),
   /** Printed at the foot of every receipt, e.g. "No goods or services were provided in return for this gift." */
   receiptFooter: z.string().max(1000).optional(),
+  /** Where members pay (the shul's page at its own payment provider). {amount} and {reference}
+   * are filled in; nothing identifying anyone is ever added. Empty hides the pay button. */
+  paymentUrl: paymentUrlSchema.optional(),
+  /** Shown beside the pay button, e.g. which reference to quote. */
+  paymentNote: z.string().max(300).optional(),
 });
 export type OrgProfile = z.infer<typeof orgProfileSchema>;
 
