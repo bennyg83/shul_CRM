@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Donation, Family, Member, Page, Pledge } from '@shulcrm/shared';
+import type { Donation, Family, Member, Page, PledgeRow } from '@shulcrm/shared';
 import { db } from './db.ts';
 
 // ---------------------------------------------------------------------------
@@ -25,6 +25,8 @@ interface PageSpec {
   extra?: string;
   /** Per-currency totals of `amount` over the whole filtered set. */
   totals?: boolean;
+  /** Fill in anything that needs a second query, once for the whole page. */
+  enrich?(rows: Row[]): void;
   /** Turn a raw row into the API's shape. */
   map(row: Row): unknown;
 }
@@ -75,9 +77,33 @@ const SPECS = {
     then: 'createdAt DESC, id',
     filters: { familyId: 'familyId = ?', year: 'year = ?', fund: 'fund = ?', currency: 'currency = ?' },
     extra: `, ${familyName('pledges')} AS familyName,
-      COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.pledgeId = pledges.id), 0) AS paid`,
+      COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.pledgeId = pledges.id AND d.currency = pledges.currency), 0) AS paid`,
     totals: true,
-    map: (r) => clean(r) as Pledge & { familyName: string; paid: number },
+    enrich: (rows) => {
+      // What was paid towards these pledges in any currency other than their own. It cannot be
+      // subtracted without an exchange rate, so it travels beside the balance instead.
+      const ids = rows.map((r) => String(r.id));
+      if (ids.length === 0) return;
+      const byPledge = new Map<string, Record<string, number>>();
+      const paidRows = db
+        .prepare(
+          `SELECT d.pledgeId AS pledgeId, d.currency AS currency, SUM(d.amount) AS total
+           FROM donations d JOIN pledges p ON p.id = d.pledgeId
+           WHERE d.pledgeId IN (${ids.map(() => '?').join(', ')}) AND d.currency != p.currency
+           GROUP BY d.pledgeId, d.currency`,
+        )
+        .all(...ids) as Array<{ pledgeId: string; currency: string; total: number }>;
+      for (const r of paidRows) {
+        const found = byPledge.get(r.pledgeId) ?? {};
+        found[r.currency] = r.total;
+        byPledge.set(r.pledgeId, found);
+      }
+      for (const row of rows) {
+        row.paidOther = byPledge.get(String(row.id)) ?? {};
+        row.balance = Math.max(0, Number(row.amount) - Number(row.paid));
+      }
+    },
+    map: (r) => clean(r) as unknown as PledgeRow,
   },
   donations: {
     table: 'donations',
@@ -152,6 +178,7 @@ export function page(list: PagedList, query: Record<string, unknown>): Page<unkn
     .prepare(`SELECT ${spec.table}.*${spec.extra ?? ''} FROM ${spec.table} ${whereSql} ORDER BY ${orderSql}, ${spec.then} LIMIT ? OFFSET ?`)
     .all(...params, limit, offset) as Row[];
 
+  spec.enrich?.(rows);
   const result: Page<unknown> = { items: rows.map(spec.map), total, limit, offset };
   if (spec.totals) {
     const sums = db

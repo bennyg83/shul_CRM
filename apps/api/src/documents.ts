@@ -1,5 +1,6 @@
 import {
   addDaysISO,
+  pledgePayments,
   formatHebrew,
   type Donation,
   type Family,
@@ -65,7 +66,7 @@ function statementFor(family: Family, year: number, all: { donations: Donation[]
     .sort((a, b) => a.date.localeCompare(b.date));
   const totals: Record<string, number> = {};
   for (const d of mine) totals[d.currency] = (totals[d.currency] ?? 0) + d.amount;
-  const paidFor = (pledgeId: string) => all.donations.filter((d) => d.pledgeId === pledgeId).reduce((s, d) => s + d.amount, 0);
+  const paidTowards = (pledgeId: string) => all.donations.filter((d) => d.pledgeId === pledgeId);
   return {
     org: getOrg(),
     family,
@@ -82,8 +83,7 @@ function statementFor(family: Family, year: number, all: { donations: Donation[]
     pledges: all.pledges
       .filter((p) => p.familyId === family.id && p.year === year)
       .map((p) => {
-        const paid = paidFor(p.id);
-        return { ...p, paid, balance: Math.max(0, p.amount - paid), fundLabel: label(lists.funds, p.fund) };
+        return { ...p, ...pledgePayments(p, paidTowards(p.id)), fundLabel: label(lists.funds, p.fund) };
       }),
   };
 }

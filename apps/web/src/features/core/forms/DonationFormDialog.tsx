@@ -106,6 +106,14 @@ export function DonationFormDialog({
   // Only the chosen family's pledges can be linked.
   const familyIdValue = useWatch({ control, name: 'familyId' });
   const familyPledges = (pledges ?? []).filter((p) => p.familyId === familyIdValue);
+  // A payment only counts against a pledge promised in the same currency, so warn before
+  // the office records one that will leave the balance untouched.
+  const pledgeIdValue = useWatch({ control, name: 'pledgeId' });
+  const currencyValue = useWatch({ control, name: 'currency' });
+  const linkedPledge = (pledges ?? []).find((p) => p.id === pledgeIdValue);
+  const currencyMismatch = Boolean(
+    linkedPledge && currencyValue && linkedPledge.currency !== currencyValue,
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -261,6 +269,11 @@ export function DonationFormDialog({
                 sx={{ flexGrow: 1 }}
               />
             </Stack>
+            {currencyMismatch && linkedPledge && (
+              <Alert severity="warning">
+                {`This ${t('donation').toLowerCase()} is in ${currencyValue}, but the ${t('pledge').toLowerCase()} it is linked to was promised in ${linkedPledge.currency}. It will not be subtracted from that ${t('pledge').toLowerCase()}'s balance, because the two currencies differ. It will be recorded and shown beside the ${t('pledge').toLowerCase()} instead. You can still save it.`}
+              </Alert>
+            )}
             <TextField label="Note" multiline minRows={2} {...register('note')} />
             {mutation.isError && (
               <Alert severity="error">{(mutation.error as Error).message}</Alert>

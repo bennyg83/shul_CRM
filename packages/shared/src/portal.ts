@@ -9,6 +9,7 @@
 
 import { z } from 'zod';
 import { UUID_PATTERN } from './ids.ts';
+import type { PledgePayments } from './money.ts';
 import { importantDateSchema, type Donation, type Family, type ImportantDate, type Member, type Pledge } from './schemas.ts';
 
 const uuid = () => z.string().regex(UUID_PATTERN, 'Must be a UUID');
@@ -69,9 +70,7 @@ export interface PortalHome {
   canEdit: boolean;
 }
 
-export interface PortalPledge extends Pledge {
-  paid: number;
-  balance: number;
+export interface PortalPledge extends Pledge, PledgePayments {
   fundLabel: string;
 }
 

@@ -1,7 +1,7 @@
 import { Box, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'react-router-dom';
-import type { StatementData } from '@shulcrm/shared';
+import { describeOtherCurrencies, type StatementData } from '@shulcrm/shared';
 import {
   getReceipt,
   getStatement,
@@ -178,20 +178,30 @@ function StatementSheet({ s }: { s: StatementData }) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {s.pledges.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell sx={cell}>{p.fundLabel}</TableCell>
-                  <TableCell sx={cell} align="right">
-                    {money(p.amount, p.currency)}
-                  </TableCell>
-                  <TableCell sx={cell} align="right">
-                    {money(p.paid, p.currency)}
-                  </TableCell>
-                  <TableCell sx={cell} align="right">
-                    {money(p.balance, p.currency)}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {s.pledges.map((p) => {
+                // Paid in another currency: shown beside the pledge, because without an
+                // exchange rate a printed statement must not net it off.
+                const other = describeOtherCurrencies(p.paidOther, money);
+                return (
+                  <TableRow key={p.id}>
+                    <TableCell sx={cell}>{p.fundLabel}</TableCell>
+                    <TableCell sx={cell} align="right">
+                      {money(p.amount, p.currency)}
+                    </TableCell>
+                    <TableCell sx={cell} align="right">
+                      {money(p.paid, p.currency)}
+                      {other && (
+                        <Typography sx={{ fontSize: 11, color: '#555' }}>
+                          also {other} paid, not included
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell sx={cell} align="right">
+                      {money(p.balance, p.currency)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </>

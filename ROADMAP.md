@@ -68,7 +68,20 @@ Avoid: SheetJS `xlsx` (the npm copy is outdated and newer builds are off-registr
 - Today's IDs (`fam-001`, `fam-lx3k…`) are replaced: a one-time migration rewrites every ID and foreign key inside one transaction. The current DB holds demo data, so a reseed works too, but the migration is the pattern real shuls will need.
 - `GET /api/org` returns the `orgId`; exports and backups carry it.
 
-### 3. Until login exists (now Phase 5), the app is local-only
+### 3. Money: never convert between currencies
+
+Decided 2026-10-21. A pledge is promised in one currency; a donation against it may be recorded in
+another. There is no exchange rate in this app, and inventing one would quietly misstate what a
+family owes — the figure a shul reads out to a member has to be one it can stand behind.
+
+So: money paid in a pledge's own currency counts against it, and anything else is reported beside
+it and never netted off. One helper does this everywhere (`pledgePayments()` in
+`packages/shared/src/money.ts`); nothing should do the arithmetic for itself. Totals are per
+currency, never summed into one number. The donation form warns when a payment will not reduce
+the pledge it is linked to. If a shul ever needs real conversion, that means stored rates with
+dates — a feature in its own right, not a default.
+
+### 4. Until login exists (now Phase 5), the app is local-only
 
 The API binds to `127.0.0.1` by default. Don't put real member data on a public URL until
 Phase 5 is done.

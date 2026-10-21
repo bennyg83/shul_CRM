@@ -166,6 +166,14 @@ Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6
 - **Migration 5** adds `sponsorships` and `sponsorshipClaims`.
 - **Dev logins** (owner and a member, for trying the portal): `apps/api/data/dev-owner.txt`, gitignored.
 
+## Money and currencies (2026-10-21)
+
+- A pledge is promised in one currency. Only donations in that same currency reduce its balance;
+  anything paid in another is reported beside it as `paidOther` and never netted off, because the
+  app holds no exchange rates. One helper, `pledgePayments()` in `packages/shared/src/money.ts`.
+- Affects the pledges list, the dashboard, year-end statements, the pledge-status report and the
+  member portal. The donation form warns when a payment will not reduce the pledge it is linked to.
+
 ## Not yet done
 
 See `ROADMAP.md`. Next: Phase 7 (packaging: Docker, the new-shul setup wizard, the deploy guide).

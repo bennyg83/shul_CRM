@@ -291,7 +291,7 @@ export function dashboardStats(): DashboardStats {
     .prepare(`
         SELECT p.currency AS currency,
                COALESCE(SUM(MAX(0, p.amount - COALESCE(
-                 (SELECT SUM(d.amount) FROM donations d WHERE d.pledgeId = p.id), 0)
+                 (SELECT SUM(d.amount) FROM donations d WHERE d.pledgeId = p.id AND d.currency = p.currency), 0)
                )), 0) AS total
         FROM pledges p
         WHERE p.year = ?

@@ -41,6 +41,7 @@ export function summaries(from?: string, to?: string, forFamilyId?: string): Spo
   const paidByPledge = new Map(
     (
       db
+        // Any currency counts here: whatever was paid, giving the slot back is the office's job.
         .prepare('SELECT pledgeId, SUM(amount) AS paid FROM donations WHERE pledgeId IS NOT NULL GROUP BY pledgeId')
         .all() as Array<{ pledgeId: string; paid: number }>
     ).map((r) => [r.pledgeId, r.paid]),

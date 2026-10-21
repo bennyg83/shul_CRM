@@ -5,6 +5,7 @@
 
 import { z } from 'zod';
 import { UUID_PATTERN } from './ids.ts';
+import type { PledgePayments } from './money.ts';
 import type { Donation, Family, ImportantDate, Member, Pledge, UpcomingDate } from './schemas.ts';
 import type { OrgProfile } from './settings.ts';
 
@@ -276,7 +277,7 @@ export interface StatementData {
   donations: Array<Donation & { receiptNumber: string; fundLabel: string; methodLabel: string }>;
   /** Total per currency. */
   totals: Record<string, number>;
-  pledges: Array<Pledge & { paid: number; balance: number; fundLabel: string }>;
+  pledges: Array<Pledge & PledgePayments & { fundLabel: string }>;
 }
 
 export interface YahrzeitNotice {

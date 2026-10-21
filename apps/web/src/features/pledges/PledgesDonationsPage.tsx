@@ -31,6 +31,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import SearchIcon from '@mui/icons-material/Search';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Donation, DonationRow, Pledge, PledgeRow } from '@shulcrm/shared';
+import { describeOtherCurrencies, hasOtherCurrency } from '@shulcrm/shared';
 import {
   deleteDonation,
   deletePledge,
@@ -348,10 +349,22 @@ export function PledgesDonationsPage() {
                           <TableCell>{p.type ? PLEDGE_TYPE[p.type] : '—'}</TableCell>
                           <TableCell>{p.dueDate ?? '—'}</TableCell>
                           <TableCell align="right">{money(p.amount, p.currency)}</TableCell>
-                          <TableCell align="right">{money(p.paid, p.currency)}</TableCell>
                           <TableCell align="right">
-                            {money(Math.max(0, p.amount - p.paid), p.currency)}
+                            {money(p.paid, p.currency)}
+                            {/* There is no exchange rate here, so other currencies sit beside
+                                the pledge rather than counting towards it. */}
+                            {hasOtherCurrency(p) && (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ display: 'block' }}
+                              >
+                                also {describeOtherCurrencies(p.paidOther, money)} paid, not
+                                included in paid or balance
+                              </Typography>
+                            )}
                           </TableCell>
+                          <TableCell align="right">{money(p.balance, p.currency)}</TableCell>
                           <TableCell align="right">
                             <IconButton
                               size="small"

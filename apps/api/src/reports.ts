@@ -1,4 +1,4 @@
-import { formatHebrew, type ReportKey, type ReportTable } from '@shulcrm/shared';
+import { formatHebrew, pledgePayments, type ReportKey, type ReportTable } from '@shulcrm/shared';
 import { donations, families, members, pledges } from './repo.ts';
 import { getLookups, getTerms } from './settings.ts';
 import { yahrzeitNotices } from './documents.ts';
@@ -70,13 +70,17 @@ function pledgeStatus(year: number): ReportTable {
     .list()
     .filter((p) => p.year === year)
     .map((p) => {
-      const paid = all.filter((d) => d.pledgeId === p.id).reduce((s, d) => s + d.amount, 0);
-      return [famName.get(p.familyId) ?? '', label('funds', p.fund), p.currency, p.amount, paid, Math.max(0, p.amount - paid), p.dueDate ?? ''];
+      const { paid, balance, paidOther } = pledgePayments(p, all.filter((d) => d.pledgeId === p.id));
+      // Payments in another currency get their own column rather than being added in.
+      const other = Object.entries(paidOther)
+        .map(([currency, amount]) => `${amount} ${currency}`)
+        .join(', ');
+      return [famName.get(p.familyId) ?? '', label('funds', p.fund), p.currency, p.amount, paid, balance, other, p.dueDate ?? ''];
     })
     .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
   return {
     title: `${getTerms().pledge} status, ${year}`,
-    columns: [getTerms().family, 'Fund', 'Currency', 'Pledged', 'Paid', 'Still owed', 'Due'],
+    columns: [getTerms().family, 'Fund', 'Currency', 'Pledged', 'Paid', 'Still owed', 'Paid in other currencies', 'Due'],
     rows,
     numeric: [3, 4, 5],
   };

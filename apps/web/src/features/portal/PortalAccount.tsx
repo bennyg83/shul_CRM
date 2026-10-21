@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import {
   Alert,
   Box,
@@ -17,7 +18,12 @@ import {
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import { buildPaymentUrl, type PortalPledge } from '@shulcrm/shared';
+import {
+  buildPaymentUrl,
+  describeOtherCurrencies,
+  hasOtherCurrency,
+  type PortalPledge,
+} from '@shulcrm/shared';
 import { getPortalAccount } from '@/features/core/service';
 import { useSettings } from '@/features/settings/useSettings';
 import { portalKeys, useDateFormat } from './usePortalData';
@@ -54,6 +60,16 @@ function Figures({
     </Paper>
   );
 }
+
+/**
+ * Money paid in a currency the pledge was not promised in cannot be netted off without an
+ * exchange rate, so a family is told about it plainly rather than left to guess.
+ */
+const otherCurrencyNote = (
+  pledge: PortalPledge,
+  money: (amount: number, currency: string) => string,
+) =>
+  `You have also paid ${describeOtherCurrencies(pledge.paidOther, money)} towards this, which the office will settle separately. It is not taken off the amount still owed.`;
 
 export function PortalAccount() {
   const theme = useTheme();
@@ -183,6 +199,11 @@ export function PortalAccount() {
                   <Typography variant="body1" sx={{ fontWeight: 700 }}>
                     Still owed {settings.money(pledge.balance, pledge.currency)}
                   </Typography>
+                  {hasOtherCurrency(pledge) && (
+                    <Typography variant="body2" color="text.secondary">
+                      {otherCurrencyNote(pledge, settings.money)}
+                    </Typography>
+                  )}
                 </Stack>
                 {account.payment && (
                   <Box sx={{ mt: 1.5 }}>
@@ -211,28 +232,39 @@ export function PortalAccount() {
               </TableHead>
               <TableBody>
                 {open.map((pledge: PortalPledge) => (
-                  <TableRow key={pledge.id}>
-                    <TableCell>{pledge.fundLabel}</TableCell>
-                    <TableCell>{pledge.year}</TableCell>
-                    <TableCell align="right">
-                      {settings.money(pledge.amount, pledge.currency)}
-                    </TableCell>
-                    <TableCell align="right">
-                      {settings.money(pledge.paid, pledge.currency)}
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>
-                      {settings.money(pledge.balance, pledge.currency)}
-                    </TableCell>
-                    {account.payment && (
+                  <Fragment key={pledge.id}>
+                    <TableRow>
+                      <TableCell>{pledge.fundLabel}</TableCell>
+                      <TableCell>{pledge.year}</TableCell>
                       <TableCell align="right">
-                        {payButton(
-                          `Pay ${settings.money(pledge.balance, pledge.currency)} towards ${pledge.fundLabel} ${pledge.year}, in a new tab`,
-                          pledge.balance,
-                          pledge.id,
-                        )}
+                        {settings.money(pledge.amount, pledge.currency)}
                       </TableCell>
+                      <TableCell align="right">
+                        {settings.money(pledge.paid, pledge.currency)}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>
+                        {settings.money(pledge.balance, pledge.currency)}
+                      </TableCell>
+                      {account.payment && (
+                        <TableCell align="right">
+                          {payButton(
+                            `Pay ${settings.money(pledge.balance, pledge.currency)} towards ${pledge.fundLabel} ${pledge.year}, in a new tab`,
+                            pledge.balance,
+                            pledge.id,
+                          )}
+                        </TableCell>
+                      )}
+                    </TableRow>
+                    {hasOtherCurrency(pledge) && (
+                      <TableRow>
+                        <TableCell colSpan={account.payment ? 6 : 5} sx={{ borderTop: 0, pt: 0 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            {otherCurrencyNote(pledge, settings.money)}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
                     )}
-                  </TableRow>
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>

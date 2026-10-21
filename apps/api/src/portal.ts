@@ -1,5 +1,7 @@
 import {
+  addMoney,
   gregorianToHebrew,
+  pledgePayments,
   portalDateSchema,
   portalFamilySchema,
   portalMemberSchema,
@@ -169,17 +171,16 @@ export function account(scope: PortalScope): PortalAccount {
   const year = new Date().getFullYear();
   const all = donations.list();
   const ours = all.filter((d: Donation) => d.familyId === scope.family.id);
-  const paidFor = (pledgeId: string) => all.filter((d) => d.pledgeId === pledgeId).reduce((sum, d) => sum + d.amount, 0);
+  const paidTowards = (pledgeId: string) => all.filter((d) => d.pledgeId === pledgeId);
 
   const owed: Record<string, number> = {};
   const ourPledges = pledges
     .list()
     .filter((p: Pledge) => p.familyId === scope.family.id)
     .map((p) => {
-      const paid = paidFor(p.id);
-      const balance = Math.max(0, p.amount - paid);
-      if (balance > 0) owed[p.currency] = (owed[p.currency] ?? 0) + balance;
-      return { ...p, paid, balance, fundLabel: fundLabel(p.fund) };
+      const money = pledgePayments(p, paidTowards(p.id));
+      addMoney(owed, p.currency, money.balance);
+      return { ...p, ...money, fundLabel: fundLabel(p.fund) };
     })
     .sort((a, b) => b.year - a.year || b.balance - a.balance);
 

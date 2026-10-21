@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { UUID_PATTERN } from './ids.ts';
 import { RECUR_BY, type RecurBy } from './dateTypes.ts';
 import type { HebrewDate } from './hebrewCalendar.ts';
+import type { PledgePayments } from './money.ts';
 
 /** Record IDs and foreign keys are UUIDs (generated with newId() from ids.ts). */
 const uuid = () => z.string().regex(UUID_PATTERN, 'Must be a UUID');
@@ -253,6 +254,7 @@ export interface PageQuery {
 }
 
 /** A pledge row in a paged list, with its family and what has been paid toward it. */
-export type PledgeRow = Pledge & { familyName: string; paid: number };
+/** A pledge row in a paged list, with its family and what has been paid towards it. */
+export type PledgeRow = Pledge & PledgePayments & { familyName: string };
 /** A donation row in a paged list, with its family's name. */
 export type DonationRow = Donation & { familyName: string; pledgeFund?: string; pledgeYear?: number };
