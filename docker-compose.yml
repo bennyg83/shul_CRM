@@ -1,0 +1,23 @@
+# A whole shul in one service. Copy .env.example to .env, fill it in, then:
+#
+#   docker compose up -d
+#   docker compose logs -f app     # the first run prints a setup code
+#
+# Put HTTPS in front of this before it goes on the internet, and set TRUST_PROXY
+# and COOKIE_SECURE when you do (see .env.example).
+
+services:
+  app:
+    build: .
+    image: shulcrm
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    env_file:
+      - .env
+    volumes:
+      # The database, its backups and the logo. This is the only thing to back up.
+      - shulcrm-data:/data
+
+volumes:
+  shulcrm-data:

@@ -14,9 +14,10 @@ apps/api/data/
 *.log
 npm-debug.log*
 
-# env files
+# env files (but .env.example documents every setting and belongs in git)
 .env
 .env.*
+!.env.example
 
 # OS / editor cruft
 .DS_Store

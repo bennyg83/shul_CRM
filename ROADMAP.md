@@ -198,7 +198,7 @@ Built to the decisions of 2026-10-20: one login per adult member, edits go live,
 - [x] Turned on and off with the Phase 2 feature switch; with it off, every portal route is refused.
 - [x] **Found and fixed while testing:** invitation and reset tokens were being written to the request log in full, so anyone who could read the logs could have taken over an account. They are now redacted.
 
-## Phase 7 — Packaging per shul (next)
+## Phase 7 — Packaging per shul (in progress)
 
 The app is feature-complete for one shul; this phase is about standing a *new* one up without a
 developer. Rewritten 2026-10-21, now that login, settings and the portal exist.
@@ -206,21 +206,21 @@ developer. Rewritten 2026-10-21, now that login, settings and the portal exist.
 **1. One thing to run.** Today the API and the web app are two dev servers. For a real install the
 API should serve the built web app from the same origin, so there is one process, one port and one
 address — which also makes the session cookie and the same-origin rule straightforward.
-- [ ] Serve `apps/web/dist` from the API, with client-side routing falling back to `index.html`.
-- [ ] Keep `/api/*` ahead of the static handler, and send caching headers that do not cache `index.html`.
+- [x] Serve `apps/web/dist` from the API, with client-side routing falling back to `index.html`.
+- [x] Keep `/api/*` ahead of the static handler, and send caching headers that do not cache `index.html`.
 
 **2. One Dockerfile.** Official `node` image (its OS packages do not affect our licence policy),
 a volume for `apps/api/data/` (the database, its backups and the logo all live there, so one
 volume is the whole shul).
-- [ ] Multi-stage build: install, build the web app, then a slim runtime image.
-- [ ] Run as a non-root user; the data volume is the only writable path.
-- [ ] A `docker compose` file a shul can copy, with the volume and environment already wired.
+- [x] Multi-stage build: install, build the web app, then a slim runtime image.
+- [x] Run as a non-root user; the data volume is the only writable path.
+- [x] A `docker compose` file a shul can copy, with the volume and environment already wired.
 
 **3. Configuration.** Every setting the app now reads needs documenting in one place:
-- [ ] `.env.example` covering `PORT`, `HOST`, `PUBLIC_URL`, `CRM_DATA_DIR`, `CRM_BACKUP_DIR`,
+- [x] `.env.example` covering `PORT`, `HOST`, `PUBLIC_URL`, `CRM_DATA_DIR`, `CRM_BACKUP_DIR`,
   `BACKUP_KEEP`, `BACKUP_INTERVAL_HOURS`, `LOG_LEVEL`, `TRUST_PROXY`, `COOKIE_SECURE`,
   `ALLOWED_ORIGINS`, and `OWNER_EMAIL` / `OWNER_PASSWORD` / `OWNER_NAME` for the first owner.
-- [ ] Say plainly in the README that it must sit behind HTTPS before it goes on the internet, and
+- [x] Say plainly in the README that it must sit behind HTTPS before it goes on the internet, and
   that `TRUST_PROXY` makes the setup code mandatory (Phase 5 already enforces that).
 
 **4. A new shul in minutes.** The pieces exist (org profile, logo, lists, terms, import); what is
@@ -228,7 +228,7 @@ missing is one guided path through them.
 - [ ] A setup wizard the owner sees on first run, straight after creating their account:
   org profile → logo → terminology and lists → import existing records → invite the office.
   Each step skippable, and reachable again from Settings.
-- [ ] A README with a "deploy a new shul" guide, and a short "what to do first" for the office.
+- [x] A README with a "deploy a new shul" guide, and a short "what to do first" for the office.
 
 **5. Loose ends worth closing in this phase.**
 - [ ] Rename the `@shulcrm/*` packages' `"license": "UNLICENSED"` once you choose a licence for the product.
@@ -245,7 +245,7 @@ missing is one guided path through them.
 | 4 | Hardening | CI green; backups running | ✅ |
 | 5 | Login and roles | Owner invites an admin; a viewer can't edit; safe to put online | ✅ |
 | 6 | Member portal | A member logs in, fixes their address, adds a yahrzeit, sees what they owe, follows the pay link, and sponsors a kiddush; staff see each change in the audit log | ✅ |
-| 7 | Packaging | A fresh shul is up in minutes | ⬜ next |
+| 7 | Packaging | A fresh shul is up in minutes | 🔄 one process, Docker, config and docs done; setup wizard left |
 
 ## What is waiting on you, not on code
 

@@ -1,4 +1,6 @@
 import express, { type ErrorRequestHandler } from 'express';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { ZodError, z } from 'zod';
 import type { ZodObject, ZodRawShape } from 'zod';
 import {
@@ -727,6 +729,45 @@ app.get('/api/families/:id/detail', (req, res) => {
 app.get('/api/members/:id/detail', (req, res) => {
   res.json(repo.memberDetail(req.params.id));
 });
+
+// ---------------------------------------------------------------------------
+// The built web app, so one install is one process on one port and one origin.
+// Everything above this point has already had its chance at the request, so an
+// /api path that reaches here is a real 404 and must never be answered with the
+// web app's index.html — a signed-out browser would see a page instead of 401.
+// ---------------------------------------------------------------------------
+
+const WEB_DIST = process.env.WEB_DIST_DIR ?? join(import.meta.dirname, '..', '..', 'web', 'dist');
+const INDEX_HTML = join(WEB_DIST, 'index.html');
+
+if (existsSync(INDEX_HTML)) {
+  const isApi = (req: express.Request) => under(req.path.toLowerCase(), '/api');
+  app.use((req, res, next) => {
+    if (isApi(req)) return next();
+    express.static(WEB_DIST, {
+      index: false,
+      // Vite puts a content hash in every asset's name, so those can be cached hard. index.html
+      // is the one file whose name never changes, and it names the current assets.
+      setHeaders: (response, path) => {
+        response.setHeader(
+          'Cache-Control',
+          path === INDEX_HTML ? 'no-cache' : 'public, max-age=31536000, immutable',
+        );
+      },
+    })(req, res, next);
+  });
+  // Client-side routes (/families/…, /portal, …) are not files: the app itself resolves them.
+  // A path that names a file is excluded, so an asset that has gone (a stale page asking for the
+  // previous build) gets a 404 rather than a page of HTML the browser cannot run.
+  const namesAFile = (path: string) => /\.[^./]+$/.test(path);
+  app.get('*', (req, res, next) => {
+    if (isApi(req) || namesAFile(req.path) || !req.accepts('html')) return next();
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(INDEX_HTML);
+  });
+} else {
+  log.info(`no built web app at ${WEB_DIST}; serving the API only`);
+}
 
 // 404 for unmatched routes.
 app.use((req, res) => {

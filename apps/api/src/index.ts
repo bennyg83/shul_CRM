@@ -12,8 +12,8 @@ await prepareData();
 scheduleBackups((msg) => log.info({ area: 'backup' }, msg));
 
 const PORT = Number(process.env.PORT ?? 3000);
-// There is no login yet (ROADMAP Phase 5), so only this machine may connect.
-// Set HOST=0.0.0.0 to expose it on the network once auth exists.
+// Only this machine may connect unless you say otherwise. Set HOST=0.0.0.0 to serve the
+// network or a container; put HTTPS in front of it before it goes on the internet.
 const HOST = process.env.HOST ?? '127.0.0.1';
 app.listen(PORT, HOST, () => {
   log.info(`listening on http://${HOST}:${PORT}`);

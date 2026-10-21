@@ -1,0 +1,15 @@
+# Kept out of the build context: installed in the image instead, built in the image,
+# or local data that must never end up in an image.
+node_modules
+**/node_modules
+apps/api/data
+apps/web/dist
+.git
+.github
+*.tsbuildinfo
+*.log
+.env
+.env.*
+!.env.example
+docs
+.claude

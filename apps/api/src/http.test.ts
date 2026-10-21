@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import request from 'supertest';
@@ -7,6 +7,14 @@ import request from 'supertest';
 // The whole HTTP app, against a throwaway database (set before db.ts loads; see repo.test.ts).
 const TEST_DATA_DIR = mkdtempSync(join(tmpdir(), 'crm-http-test-'));
 process.env.CRM_DATA_DIR = TEST_DATA_DIR;
+
+// A stand-in for the built web app, so the static handler is exercised whether or not
+// apps/web/dist has been built (CI runs the tests before the build).
+const TEST_WEB_DIR = mkdtempSync(join(tmpdir(), 'crm-web-test-'));
+process.env.WEB_DIST_DIR = TEST_WEB_DIR;
+writeFileSync(join(TEST_WEB_DIR, 'index.html'), '<!doctype html><title>Shul CRM</title>');
+mkdirSync(join(TEST_WEB_DIR, 'assets'));
+writeFileSync(join(TEST_WEB_DIR, 'assets', 'index-abc123.js'), 'export default 1;\n');
 
 const { app, prepareData } = await import('./app.ts');
 const { db } = await import('./db.ts');
@@ -24,6 +32,7 @@ afterAll(() => {
   try {
     db.close();
     rmSync(TEST_DATA_DIR, { recursive: true, force: true });
+    rmSync(TEST_WEB_DIR, { recursive: true, force: true });
   } catch {
     // Best-effort on Windows.
   }
@@ -40,6 +49,34 @@ describe('basics', () => {
     const res = await api.get('/api/nowhere');
     expect(res.status).toBe(404);
     expect(res.body.error.message).toMatch(/Not found/);
+  });
+
+  it('serves the built web app and leaves /api alone', async () => {
+    const index = await api.get('/');
+    expect(index.status).toBe(200);
+    expect(index.text).toContain('Shul CRM');
+    expect(index.headers['cache-control']).toBe('no-cache');
+
+    // A client route is not a file: the web app resolves it, so it gets index.html.
+    const route = await api.get('/families/not-a-file').set('accept', 'text/html');
+    expect(route.status).toBe(200);
+    expect(route.text).toContain('Shul CRM');
+
+    // Hashed assets may be cached forever.
+    const asset = await api.get('/assets/index-abc123.js');
+    expect(asset.status).toBe(200);
+    expect(asset.headers['cache-control']).toContain('immutable');
+
+    // An unknown API path stays a JSON 404 however it is spelled — a browser must never be
+    // handed the web app in place of a 401 or 404 from the API.
+    for (const path of ['/api/nowhere', '/API/nowhere', '/Api/Settings/nope']) {
+      const res = await api.get(path).set('accept', 'text/html');
+      expect(res.status, path).toBe(404);
+      expect(res.text, path).not.toContain('Shul CRM');
+    }
+
+    // A missing file that is not a page is a 404, not the web app.
+    expect((await api.get('/assets/gone.js')).status).toBe(404);
   });
 
   it('rejects malformed JSON with 400', async () => {
