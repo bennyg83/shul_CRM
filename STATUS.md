@@ -176,7 +176,9 @@ Important Dates now carry a Hebrew date derived from the Gregorian date (e.g. "6
 
 ## Not yet done
 
-See `ROADMAP.md`. Next: Phase 7 (packaging: Docker, the new-shul setup wizard, the deploy guide).
+See `ROADMAP.md`. Next: Phase 7 — the API serves the built web app, one Dockerfile, `.env.example`,
+a first-run setup wizard and a deploy guide. ROADMAP also lists what is waiting on you (Pilzno data,
+a mail server, a payment page, a licence) and the known limitations.
 
 ## Commands
 

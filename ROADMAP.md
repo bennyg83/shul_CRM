@@ -198,22 +198,70 @@ Built to the decisions of 2026-10-20: one login per adult member, edits go live,
 - [x] Turned on and off with the Phase 2 feature switch; with it off, every portal route is refused.
 - [x] **Found and fixed while testing:** invitation and reset tokens were being written to the request log in full, so anyone who could read the logs could have taken over an account. They are now redacted.
 
-## Phase 7 — Packaging per shul
+## Phase 7 — Packaging per shul (next)
 
-- [ ] One Dockerfile (the API serves the built web app), with a volume for `data/`. Use the official `node` image; the OS packages inside it don't affect our code's license.
-- [ ] `.env.example`, a new-org setup wizard (org profile → logo → owner → import), and a README with a "deploy a new shul" guide.
+The app is feature-complete for one shul; this phase is about standing a *new* one up without a
+developer. Rewritten 2026-10-21, now that login, settings and the portal exist.
 
----
+**1. One thing to run.** Today the API and the web app are two dev servers. For a real install the
+API should serve the built web app from the same origin, so there is one process, one port and one
+address — which also makes the session cookie and the same-origin rule straightforward.
+- [ ] Serve `apps/web/dist` from the API, with client-side routing falling back to `index.html`.
+- [ ] Keep `/api/*` ahead of the static handler, and send caching headers that do not cache `index.html`.
+
+**2. One Dockerfile.** Official `node` image (its OS packages do not affect our licence policy),
+a volume for `apps/api/data/` (the database, its backups and the logo all live there, so one
+volume is the whole shul).
+- [ ] Multi-stage build: install, build the web app, then a slim runtime image.
+- [ ] Run as a non-root user; the data volume is the only writable path.
+- [ ] A `docker compose` file a shul can copy, with the volume and environment already wired.
+
+**3. Configuration.** Every setting the app now reads needs documenting in one place:
+- [ ] `.env.example` covering `PORT`, `HOST`, `PUBLIC_URL`, `CRM_DATA_DIR`, `CRM_BACKUP_DIR`,
+  `BACKUP_KEEP`, `BACKUP_INTERVAL_HOURS`, `LOG_LEVEL`, `TRUST_PROXY`, `COOKIE_SECURE`,
+  `ALLOWED_ORIGINS`, and `OWNER_EMAIL` / `OWNER_PASSWORD` / `OWNER_NAME` for the first owner.
+- [ ] Say plainly in the README that it must sit behind HTTPS before it goes on the internet, and
+  that `TRUST_PROXY` makes the setup code mandatory (Phase 5 already enforces that).
+
+**4. A new shul in minutes.** The pieces exist (org profile, logo, lists, terms, import); what is
+missing is one guided path through them.
+- [ ] A setup wizard the owner sees on first run, straight after creating their account:
+  org profile → logo → terminology and lists → import existing records → invite the office.
+  Each step skippable, and reachable again from Settings.
+- [ ] A README with a "deploy a new shul" guide, and a short "what to do first" for the office.
+
+**5. Loose ends worth closing in this phase.**
+- [ ] Rename the `@shulcrm/*` packages' `"license": "UNLICENSED"` once you choose a licence for the product.
+- [ ] Decide whether the `events` feature switch should also hide Sponsorships, which currently rides on it.
 
 ## Order and checkpoints
 
-| # | Phase | Checkpoint |
-|---|---|---|
-| 0 | Clean base | App works without login; all IDs are UUIDs; `license:check` passes with zero copyleft; pushed |
-| 1 | Hebrew recurrence | Yahrzeit list matches a luach for a test set |
-| 2 | Configurability + logo + import | Demo "Beth Shalom" runs from Settings alone with its own logo; Pilzno data imported |
-| 3 | Receipts, notices, email, reports | Pilzno uses it for real (on a local/office machine) |
-| 4 | Hardening | CI green; backups running |
-| 5 | Login and roles | Owner invites an admin; a viewer can't edit; safe to put online |
-| 6 | Member portal | A member logs in, fixes their address, adds a yahrzeit, sees what they owe, follows the pay link, and sponsors a kiddush; staff see each change in the audit log |
-| 7 | Packaging | A fresh shul is up in minutes |
+| # | Phase | Checkpoint | Status |
+|---|---|---|---|
+| 0 | Clean base | App works without login; all IDs are UUIDs; `license:check` passes with zero copyleft; pushed | ✅ |
+| 1 | Hebrew recurrence | Yahrzeit list matches a luach for a test set | ✅ 1,680 yahrzeits matched Hebcal |
+| 2 | Configurability + logo + import | Demo "Beth Shalom" runs from Settings alone with its own logo; Pilzno data imported | ✅ build / ⏳ awaiting Pilzno's files |
+| 3 | Receipts, notices, email, reports | Pilzno uses it for real (on a local/office machine) | ✅ build / ⏳ awaiting a real mail server |
+| 4 | Hardening | CI green; backups running | ✅ |
+| 5 | Login and roles | Owner invites an admin; a viewer can't edit; safe to put online | ✅ |
+| 6 | Member portal | A member logs in, fixes their address, adds a yahrzeit, sees what they owe, follows the pay link, and sponsors a kiddush; staff see each change in the audit log | ✅ |
+| 7 | Packaging | A fresh shul is up in minutes | ⬜ next |
+
+## What is waiting on you, not on code
+
+- **Pilzno's real records** — the CSV/Excel import is built and tested; it needs the files.
+- **A mail server** — SMTP details in Settings → Email, then turn test mode off. Nothing is sent until you do.
+- **A payment page** — the URL for your own provider in Settings → Organization; the portal's pay button appears once it is set.
+- **A licence for the product** — the packages say `UNLICENSED` until you choose.
+- **Pushing to GitHub** — master is ahead of `origin`; say the word.
+
+## Known limitations
+
+- A pledge's balance is a lifetime figure: a payment made in a later year reduces an earlier year's
+  pledge on that year's statement. Consistent across the app and believed intentional, but worth
+  knowing when a statement is queried.
+- No exchange rates: money paid towards a pledge in another currency is reported beside it, never
+  converted (ground rule 3).
+- The abandoned `wip/auth` branch is still in the repository. Nothing uses it; migration 4 drops
+  the empty tables it left behind. It can be deleted whenever you like.
+
