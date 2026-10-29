@@ -25,45 +25,50 @@ export const events = {
   remove: (id: string) => removeRow('events', id),
 };
 
-function totals(eventId: string): { rsvps: number; attending: number; maybe: number } {
-  return db
+async function totals(eventId: string): Promise<{ rsvps: number; attending: number; maybe: number }> {
+  return (await db
     .prepare(
       `SELECT COUNT(*) AS rsvps,
               COALESCE(SUM(CASE WHEN status = 'yes' THEN adults + children ELSE 0 END), 0) AS attending,
               COALESCE(SUM(CASE WHEN status = 'maybe' THEN adults + children ELSE 0 END), 0) AS maybe
        FROM rsvps WHERE eventId = ?`,
     )
-    .get(eventId) as { rsvps: number; attending: number; maybe: number };
+    .get(eventId)) as { rsvps: number; attending: number; maybe: number };
 }
 
 /** Events, optionally between two ISO dates, with RSVP totals. */
-export function eventSummaries(from?: string, to?: string): EventSummary[] {
-  return events
-    .list()
-    .filter((e) => (!from || e.date >= from) && (!to || e.date <= to))
-    .map((e) => ({ ...e, ...totals(e.id) }));
+export async function eventSummaries(from?: string, to?: string): Promise<EventSummary[]> {
+  const all = await events.list();
+  const out: EventSummary[] = [];
+  for (const e of all) {
+    if (from && e.date < from) continue;
+    if (to && e.date > to) continue;
+    out.push({ ...e, ...(await totals(e.id)) });
+  }
+  return out;
 }
 
-export function eventDetail(id: string): EventDetail {
-  const event = events.get(id);
+export async function eventDetail(id: string): Promise<EventDetail> {
+  const event = await events.get(id);
   if (!event) throw new NotFound(`events ${id} not found`);
-  const families = new Map(list<Family>('families', 'name').map((f) => [f.id, f.name]));
-  const rsvps = list<Rsvp>('rsvps', 'createdAt ASC')
+  const families = new Map((await list<Family>('families', 'name')).map((f) => [f.id, f.name]));
+  const rsvps = (await list<Rsvp>('rsvps', 'createdAt ASC'))
     .filter((r) => r.eventId === id)
     .map((r) => ({ ...r, familyName: families.get(r.familyId) ?? '' }))
     .sort((a, b) => a.familyName.localeCompare(b.familyName));
-  return { event, rsvps, attending: totals(id).attending };
+  return { event, rsvps, attending: (await totals(id)).attending };
 }
 
 /** Add or change a family's RSVP; refuse a "yes" that would go over capacity. */
-export function saveRsvp(input: RsvpInput): Rsvp {
-  const event = events.get(input.eventId);
+export async function saveRsvp(input: RsvpInput): Promise<Rsvp> {
+  const event = await events.get(input.eventId);
   if (!event) throw new NotFound(`events ${input.eventId} not found`);
-  const existing = db.prepare('SELECT * FROM rsvps WHERE eventId = ? AND familyId = ?').get(input.eventId, input.familyId) as
+  const existing = (await db.prepare('SELECT * FROM rsvps WHERE eventId = ? AND familyId = ?').get(input.eventId, input.familyId)) as
     | (Rsvp & { adults: number; children: number })
     | undefined;
   if (input.status === 'yes' && event.capacity !== undefined) {
-    const others = totals(input.eventId).attending - (existing?.status === 'yes' ? existing.adults + existing.children : 0);
+    const t = await totals(input.eventId);
+    const others = t.attending - (existing?.status === 'yes' ? existing.adults + existing.children : 0);
     const people = input.adults + input.children;
     if (others + people > event.capacity) {
       throw new Conflict(`Only ${Math.max(0, event.capacity - others)} places are left (capacity ${event.capacity})`);

@@ -1,23 +1,44 @@
-# A whole shul in one service. Copy .env.example to .env, fill it in, then:
+# Shul CRM — app + PostgreSQL. Copy .env.example to .env, then:
 #
 #   docker compose up -d
-#   docker compose logs -f app     # the first run prints a setup code
+#   docker compose logs -f app
 #
-# Put HTTPS in front of this before it goes on the internet, and set TRUST_PROXY
-# and COOKIE_SECURE when you do (see .env.example).
+# Put HTTPS in front of this before it goes on the internet; set TRUST_PROXY and
+# COOKIE_SECURE when you do (see .env.example).
 
 services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shulcrm
+      POSTGRES_PASSWORD: shulcrm
+      POSTGRES_DB: shulcrm
+    volumes:
+      - shulcrm-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U shulcrm -d shulcrm']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   app:
     build: .
     image: shulcrm
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - '3000:3000'
     env_file:
       - .env
+    environment:
+      DATABASE_URL: postgresql://shulcrm:shulcrm@db:5432/shulcrm
     volumes:
-      # The database, its backups and the logo. This is the only thing to back up.
+      # Backups and any file exports (the database lives in Postgres).
       - shulcrm-data:/data
 
 volumes:
+  shulcrm-pg:
   shulcrm-data:

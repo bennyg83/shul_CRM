@@ -42,6 +42,7 @@ const UsersPage = lazy(() =>
 const PortalApp = lazy(() =>
   import('@/features/portal/PortalApp').then((m) => ({ default: m.PortalApp })),
 );
+const HostApp = lazy(() => import('@/features/host/HostApp').then((m) => ({ default: m.HostApp })));
 const SponsorshipsPage = lazy(() =>
   import('@/features/sponsorships/SponsorshipsPage').then((m) => ({ default: m.SponsorshipsPage })),
 );
@@ -102,6 +103,7 @@ function SignedInRoutes() {
   const { user } = useAuth();
   // A member login only ever sees the portal: the office's app is not theirs, whatever
   // address they type. Staff reach the portal's data through the ordinary pages instead.
+  if (user?.role === 'host') return <HostApp />;
   if (user?.role === 'member') return <PortalApp />;
 
   return (

@@ -247,6 +247,28 @@ missing is one guided path through them.
 | 6 | Member portal | A member logs in, fixes their address, adds a yahrzeit, sees what they owe, follows the pay link, and sponsors a kiddush; staff see each change in the audit log | ✅ |
 | 7 | Packaging | A fresh shul is up in minutes | 🔄 one process, Docker, config and docs done; setup wizard left |
 
+## Phase 8 — Multi-shul host (logical multi-tenant, in progress)
+
+One server, several shuls: every row is scoped by `orgId`, settings and logos are per org, and
+one login (`users.email`) can belong to many shuls via `org_memberships`.
+
+- [x] **Migration 6:** `organizations` table; `orgId` on tenant data, settings `(orgId, key)`,
+  files `(orgId, id)`, users rebuilt with `(orgId, email)` unique; existing single-shul DBs
+  backfilled to one org (id taken from the stored org profile when present).
+- [x] **Runtime scoping:** `resolveOrgId()` from the signed-in user (or the sole org during setup);
+  repo, paging, settings, email log, audit, and dashboard queries filter by org.
+- [x] **Migration 7:** unique `slug` per organization (login picker, public branding `?org=`).
+- [x] **Host console:** role `host`, `HOST_EMAIL` bootstrap, `POST /api/host/organizations`,
+  optional first owner on create; web Host app lists shuls.
+- [x] **Login routing:** `orgSlug` on sign-in, `GET /api/auth/login-targets`, `409 choose_org`
+  when the account has more than one active membership.
+- [x] **Migration 8:** `org_memberships` (role, status, name, member link per shul); duplicate
+  user rows with the same email merged to one password; sessions stay scoped by `orgId`.
+- [x] **Org switch:** `GET /api/auth/memberships`, `POST /api/auth/switch-org`, menu in the web app.
+- [x] **Cross-org guards** on insert/update (`guards.ts` + repo).
+- [x] **PostgreSQL:** `DATABASE_URL` (see `docs/POSTGRES.md`); Docker Compose includes Postgres 16;
+  tests use PGlite. Legacy SQLite removed from runtime.
+
 ## What is waiting on you, not on code
 
 - **Pilzno's real records** — the CSV/Excel import is built and tested; it needs the files.

@@ -1,7 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { rmSync } from 'node:fs';
 import request from 'supertest';
 import { pledgePayments } from '@shulcrm/shared';
 
@@ -21,11 +19,12 @@ import { pledgePayments } from '@shulcrm/shared';
 // ---------------------------------------------------------------------------
 
 // A throwaway database, set before db.ts loads (see repo.test.ts).
-const TEST_DATA_DIR = mkdtempSync(join(tmpdir(), 'crm-money-test-'));
-process.env.CRM_DATA_DIR = TEST_DATA_DIR;
+import { freshTestDatabase } from './testing/test-env.ts';
+
+const TEST_DATA_DIR = await freshTestDatabase('crm-money-test-');
 
 const { app, prepareData } = await import('./app.ts');
-const { db } = await import('./db.ts');
+const { closeDatabase } = await import('./db.ts');
 
 // Staff calls go through an agent that keeps the owner's session cookie; the portal
 // calls send a member's cookie explicitly, so a member can never ride on staff rights.
@@ -135,9 +134,9 @@ beforeAll(async () => {
   sponsorCookie = await portalLogin((await member(famSponsor.id, 'Sponsor')).id, 'sponsor@money.test');
 });
 
-afterAll(() => {
+afterAll(async () => {
   try {
-    db.close();
+    await closeDatabase();
     rmSync(TEST_DATA_DIR, { recursive: true, force: true });
   } catch {
     // Best-effort on Windows.

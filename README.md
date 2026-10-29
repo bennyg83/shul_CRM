@@ -8,6 +8,7 @@ funds, its payment methods, its date types — is configuration rather than code
 - `ROADMAP.md` — the ground rules, every phase, and what is left.
 - `STATUS.md` — what exists today and where each piece lives.
 - `docs/HANDOVER.md` — the briefing for a developer picking the project up.
+- `docs/GITHUB_PAGES.md` — optional GitHub Pages UI with the API on Tailscale (mini PC).
 
 ## Deploy a new shul
 

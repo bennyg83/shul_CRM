@@ -79,12 +79,13 @@ export function PortalApp() {
   const name = branding?.name ?? 'Our synagogue';
   const color = branding?.primaryColor ?? theme.palette.primary.main;
 
-  // Sponsorships live with events, so the tab only makes sense when the shul uses them.
   const tabs = [
     { label: 'My family', panel: <PortalFamily /> },
     { label: 'Our dates', panel: <PortalDates /> },
     { label: 'What we owe', panel: <PortalAccount /> },
-    ...(features.events ? [{ label: 'Sponsor something', panel: <PortalSponsorships /> }] : []),
+    ...(features.events || features.portal
+      ? [{ label: 'Sponsor something', panel: <PortalSponsorships /> }]
+      : []),
   ];
   const current = tabs[tab] ?? tabs[0];
 

@@ -1,23 +1,24 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { rmSync } from 'node:fs';
 import request from 'supertest';
 import type { Role } from '@shulcrm/shared';
 
 // Sign-in and permissions over HTTP, against a throwaway database (set before db.ts loads; see repo.test.ts).
-const TEST_DATA_DIR = mkdtempSync(join(tmpdir(), 'crm-auth-test-'));
-process.env.CRM_DATA_DIR = TEST_DATA_DIR;
+import { freshTestDatabase } from './testing/test-env.ts';
+
+const TEST_DATA_DIR = await freshTestDatabase('crm-auth-test-');
 
 const { app, prepareData } = await import('./app.ts');
-const { db } = await import('./db.ts');
+const { closeDatabase } = await import('./db.ts');
 const api = request(app);
 
-beforeAll(() => prepareData()); // seeds the demo data; leaves the user table empty
+beforeAll(async () => {
+  await prepareData();
+}); // seeds the demo data; leaves the user table empty
 
-afterAll(() => {
+afterAll(async () => {
   try {
-    db.close();
+    await closeDatabase();
     rmSync(TEST_DATA_DIR, { recursive: true, force: true });
   } catch {
     // Best-effort on Windows.

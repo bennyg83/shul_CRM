@@ -100,8 +100,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     { label: 'Important Dates', path: '/dates', icon: <EventNoteIcon /> },
     { label: 'Calendar', path: '/calendar', icon: <CalendarMonthIcon /> },
     ...(features.events ? [{ label: 'Events', path: '/events', icon: <CelebrationIcon /> }] : []),
-    ...(features.events
-      ? [{ label: 'Sponsorships', path: '/sponsorships', icon: <VolunteerActivismIcon /> }]
+    ...(features.events || features.portal
+      ? [{ label: 'Kiddush registrations', path: '/sponsorships', icon: <VolunteerActivismIcon /> }]
       : []),
     { label: 'Reports', path: '/reports', icon: <AssessmentIcon /> },
     ...(can('users.manage') ? [{ label: 'Users', path: '/users', icon: <BadgeIcon /> }] : []),

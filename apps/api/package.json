@@ -13,13 +13,16 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.13",
     "@shulcrm/shared": "0.0.1",
+    "@types/pg": "^8.23.1",
     "express": "^4.21.2",
     "express-rate-limit": "^8.7.1",
     "fflate": "^0.8.3",
     "helmet": "^8.3.0",
     "nodemailer": "^10.1.7",
     "papaparse": "^5.7.0",
+    "pg": "^8.23.1",
     "pino": "^10.4.0",
     "zod": "^3.23.8"
   },

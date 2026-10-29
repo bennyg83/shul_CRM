@@ -19,47 +19,26 @@ import { getLookups, getOrg, getTerms } from './settings.ts';
 // renders them into messages.
 // ---------------------------------------------------------------------------
 
-/** A short, stable receipt number: the year and the end of the donation's id. */
 export const receiptNumber = (d: Pick<Donation, 'id' | 'date'>) => `${d.date.slice(0, 4)}-${d.id.slice(-8).toUpperCase()}`;
 
-/** How to address a family ("Dear …"): "Yosef and Esther Cohen", else "Cohen Family". */
-export function familyGreeting(family: Family, familyMembers: Member[]): string {
+export async function familyGreeting(family: Family, familyMembers: Member[]): Promise<string> {
   const active = familyMembers.filter((m) => m.status === 'active');
   const heads = ['husband', 'wife'].flatMap((role) => active.filter((m) => m.role === role));
-  if (heads.length === 0) return `${family.name} ${getTerms().family}`;
+  if (heads.length === 0) return `${family.name} ${(await getTerms()).family}`;
   const names = heads.map((m) => m.firstName);
   const last = heads[0].lastName || family.name;
   return `${names.join(' and ')} ${last}`;
 }
 
-/** Postal address lines for a family. */
 export const addressLines = (f: Family) =>
   [f.address, [f.zip, f.city].filter(Boolean).join(' '), f.country].filter((l): l is string => Boolean(l && l.trim()));
 
-
-export function receipt(donationId: string): ReceiptData {
-  const donation = get<Donation>('donations', donationId);
-  if (!donation) throw new NotFound(`donations ${donationId} not found`);
-  const family = families.get(donation.familyId);
-  if (!family) throw new NotFound(`families ${donation.familyId} not found`);
-  const lists = getLookups();
-  const label = (items: Array<{ key: string; label: string }>, key: string) => items.find((i) => i.key === key)?.label ?? key;
-  return {
-    org: getOrg(),
-    family,
-    greeting: familyGreeting(family, members.list().filter((m) => m.familyId === family.id)),
-    addressLines: addressLines(family),
-    donation,
-    receiptNumber: receiptNumber(donation),
-    fundLabel: label(lists.funds, donation.fund),
-    methodLabel: label(lists.paymentMethods, donation.method),
-    pledge: donation.pledgeId ? pledges.list().find((p) => p.id === donation.pledgeId) : undefined,
-  };
-}
-
-
-function statementFor(family: Family, year: number, all: { donations: Donation[]; pledges: Pledge[]; members: Member[] }): StatementData {
-  const lists = getLookups();
+async function statementFor(
+  family: Family,
+  year: number,
+  all: { donations: Donation[]; pledges: Pledge[]; members: Member[] },
+): Promise<StatementData> {
+  const lists = await getLookups();
   const label = (items: Array<{ key: string; label: string }>, key: string) => items.find((i) => i.key === key)?.label ?? key;
   const mine = all.donations
     .filter((d) => d.familyId === family.id && d.date.startsWith(String(year)))
@@ -68,9 +47,12 @@ function statementFor(family: Family, year: number, all: { donations: Donation[]
   for (const d of mine) totals[d.currency] = (totals[d.currency] ?? 0) + d.amount;
   const paidTowards = (pledgeId: string) => all.donations.filter((d) => d.pledgeId === pledgeId);
   return {
-    org: getOrg(),
+    org: await getOrg(),
     family,
-    greeting: familyGreeting(family, all.members.filter((m) => m.familyId === family.id)),
+    greeting: await familyGreeting(
+      family,
+      all.members.filter((m) => m.familyId === family.id),
+    ),
     addressLines: addressLines(family),
     year,
     donations: mine.map((d) => ({
@@ -88,35 +70,59 @@ function statementFor(family: Family, year: number, all: { donations: Donation[]
   };
 }
 
-export function statement(familyId: string, year: number): StatementData {
-  const family = families.get(familyId);
+export async function receipt(donationId: string): Promise<ReceiptData> {
+  const donation = await get<Donation>('donations', donationId);
+  if (!donation) throw new NotFound(`donations ${donationId} not found`);
+  const family = await families.get(donation.familyId);
+  if (!family) throw new NotFound(`families ${donation.familyId} not found`);
+  const lists = await getLookups();
+  const label = (items: Array<{ key: string; label: string }>, key: string) => items.find((i) => i.key === key)?.label ?? key;
+  const memberList = await members.list();
+  const pledgeList = await pledges.list();
+  return {
+    org: await getOrg(),
+    family,
+    greeting: await familyGreeting(
+      family,
+      memberList.filter((m) => m.familyId === family.id),
+    ),
+    addressLines: addressLines(family),
+    donation,
+    receiptNumber: receiptNumber(donation),
+    fundLabel: label(lists.funds, donation.fund),
+    methodLabel: label(lists.paymentMethods, donation.method),
+    pledge: donation.pledgeId ? pledgeList.find((p) => p.id === donation.pledgeId) : undefined,
+  };
+}
+
+export async function statement(familyId: string, year: number): Promise<StatementData> {
+  const family = await families.get(familyId);
   if (!family) throw new NotFound(`families ${familyId} not found`);
-  return statementFor(family, year, { donations: donations.list(), pledges: pledges.list(), members: members.list() });
+  const all = { donations: await donations.list(), pledges: await pledges.list(), members: await members.list() };
+  return statementFor(family, year, all);
 }
 
-/** Statements for every family that gave in `year`, in name order. */
-export function statements(year: number): StatementData[] {
-  const all = { donations: donations.list(), pledges: pledges.list(), members: members.list() };
+export async function statements(year: number): Promise<StatementData[]> {
+  const all = { donations: await donations.list(), pledges: await pledges.list(), members: await members.list() };
   const gave = new Set(all.donations.filter((d) => d.date.startsWith(String(year))).map((d) => d.familyId));
-  return families
-    .list()
-    .filter((f) => gave.has(f.id))
-    .map((f) => statementFor(f, year, all));
+  const out: StatementData[] = [];
+  for (const f of await families.list()) {
+    if (gave.has(f.id)) out.push(await statementFor(f, year, all));
+  }
+  return out;
 }
 
-
-/** Yahrzeits whose day falls in [from, to], with everything a letter needs. */
-export function yahrzeitNotices(from: string, to: string): YahrzeitNotice[] {
-  const yahrzeitTypes = new Set(getLookups().dateTypes.filter((t) => t.rules === 'yahrzeit').map((t) => t.key));
-  const datesById = new Map(importantDates.list().map((d) => [d.id, d]));
-  const memberById = new Map(members.list().map((m) => [m.id, m]));
+export async function yahrzeitNotices(from: string, to: string): Promise<YahrzeitNotice[]> {
+  const yahrzeitTypes = new Set((await getLookups()).dateTypes.filter((t) => t.rules === 'yahrzeit').map((t) => t.key));
+  const datesById = new Map((await importantDates.list()).map((d) => [d.id, d]));
+  const memberById = new Map((await members.list()).map((m) => [m.id, m]));
   const allMembers = [...memberById.values()];
   const out: YahrzeitNotice[] = [];
-  for (const occurrence of dateOccurrences(from, to)) {
+  for (const occurrence of await dateOccurrences(from, to)) {
     if (!yahrzeitTypes.has(occurrence.type)) continue;
     const date = datesById.get(occurrence.id);
     const member = memberById.get(occurrence.memberId);
-    const family = member ? families.get(member.familyId) : undefined;
+    const family = member ? await families.get(member.familyId) : undefined;
     if (!date || !member || !family) continue;
     const h = occurrence.occurrenceHebrew;
     out.push({
@@ -124,7 +130,10 @@ export function yahrzeitNotices(from: string, to: string): YahrzeitNotice[] {
       date,
       member,
       family,
-      greeting: familyGreeting(family, allMembers.filter((m) => m.familyId === family.id)),
+      greeting: await familyGreeting(
+        family,
+        allMembers.filter((m) => m.familyId === family.id),
+      ),
       addressLines: addressLines(family),
       name: date.personName || `${member.firstName} ${member.lastName}`,
       hebrewName: date.personHebrewName || (date.personName ? undefined : member.hebrewName),

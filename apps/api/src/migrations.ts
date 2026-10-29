@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { isUuid, newId } from '@shulcrm/shared';
+import { isUuid, newId, slugifyOrganizationName } from '@shulcrm/shared';
 import { log } from './log.ts';
 
 // ---------------------------------------------------------------------------
@@ -446,12 +446,254 @@ function sponsorships(db: DatabaseSync): void {
   `);
 }
 
+/** 6 — Logical multi-tenant: organizations row, orgId on tenant data, settings per org,
+ *  users unique on (orgId, email). Existing single-shul data is assigned one org id. */
+function logicalMultiTenant(db: DatabaseSync): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS organizations (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL DEFAULT '',
+      createdAt TEXT NOT NULL
+    );
+  `);
+
+  let defaultOrgId: string;
+  let defaultOrgName = '';
+  const orgSetting = db.prepare("SELECT value FROM settings WHERE key = 'org'").get() as { value: string } | undefined;
+  if (orgSetting) {
+    try {
+      const profile = JSON.parse(orgSetting.value) as { orgId?: string; name?: string };
+      defaultOrgId = profile.orgId && isUuid(profile.orgId) ? profile.orgId : newId();
+      defaultOrgName = profile.name ?? '';
+    } catch {
+      defaultOrgId = newId();
+    }
+  } else {
+    defaultOrgId = newId();
+  }
+
+  const orgExists = db.prepare('SELECT 1 FROM organizations WHERE id = ?').get(defaultOrgId);
+  if (!orgExists) {
+    db.prepare('INSERT INTO organizations (id, name, createdAt) VALUES (?, ?, ?)').run(
+      defaultOrgId,
+      defaultOrgName,
+      new Date().toISOString(),
+    );
+  }
+
+  const settingsCols = db.prepare('PRAGMA table_info(settings)').all() as Array<{ name: string }>;
+  if (!settingsCols.some((c) => c.name === 'orgId')) {
+    db.exec(`
+      CREATE TABLE settings_new (
+        orgId TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        PRIMARY KEY (orgId, key)
+      );
+    `);
+    db.prepare('INSERT INTO settings_new (orgId, key, value) SELECT ?, key, value FROM settings').run(defaultOrgId);
+    db.exec('DROP TABLE settings; ALTER TABLE settings_new RENAME TO settings;');
+  }
+
+  const addOrgId = (table: string) => {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === 'orgId')) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN orgId TEXT REFERENCES organizations(id);`);
+      db.prepare(`UPDATE ${table} SET orgId = ? WHERE orgId IS NULL`).run(defaultOrgId);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_${table}_org ON ${table}(orgId);`);
+    }
+  };
+
+  for (const table of [
+    'families',
+    'members',
+    'pledges',
+    'donations',
+    'importantDates',
+    'notes',
+    'events',
+    'rsvps',
+    'emailLog',
+    'sponsorships',
+    'sponsorshipClaims',
+    'auditLog',
+  ]) {
+    addOrgId(table);
+  }
+
+  const userCols = db.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>;
+  if (!userCols.some((c) => c.name === 'orgId')) {
+    db.exec(`
+      CREATE TABLE users_new (
+        id TEXT PRIMARY KEY,
+        orgId TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        email TEXT NOT NULL COLLATE NOCASE,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL,
+        memberId TEXT REFERENCES members(id) ON DELETE SET NULL,
+        passwordHash TEXT,
+        status TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        lastLoginAt TEXT,
+        UNIQUE (orgId, email)
+      );
+    `);
+    db.prepare(
+      `INSERT INTO users_new (id, orgId, email, name, role, memberId, passwordHash, status, createdAt, lastLoginAt)
+       SELECT id, ?, email, name, role, memberId, passwordHash, status, createdAt, lastLoginAt FROM users`,
+    ).run(defaultOrgId);
+    db.exec(`
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+      CREATE INDEX IF NOT EXISTS idx_users_org ON users(orgId);
+    `);
+  }
+
+  const sessionCols = db.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>;
+  if (!sessionCols.some((c) => c.name === 'orgId')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN orgId TEXT REFERENCES organizations(id);');
+    db.prepare(
+      `UPDATE sessions SET orgId = (SELECT orgId FROM users WHERE users.id = sessions.userId) WHERE orgId IS NULL`,
+    ).run();
+    db.prepare('UPDATE sessions SET orgId = ? WHERE orgId IS NULL').run(defaultOrgId);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_org ON sessions(orgId);');
+  }
+
+  const fileCols = db.prepare('PRAGMA table_info(files)').all() as Array<{ name: string }>;
+  if (!fileCols.some((c) => c.name === 'orgId')) {
+    db.exec(`
+      CREATE TABLE files_new (
+        orgId TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        id TEXT NOT NULL,
+        contentType TEXT NOT NULL,
+        data BLOB NOT NULL,
+        updatedAt TEXT NOT NULL,
+        PRIMARY KEY (orgId, id)
+      );
+    `);
+    db.prepare(
+      'INSERT INTO files_new (orgId, id, contentType, data, updatedAt) SELECT ?, id, contentType, data, updatedAt FROM files',
+    ).run(defaultOrgId);
+    db.exec('DROP TABLE files; ALTER TABLE files_new RENAME TO files;');
+  }
+
+  log.info({ orgId: defaultOrgId }, 'logical multi-tenant migration assigned existing data to one organization');
+}
+
+/** 7 — Public slug per shul (login picker, branding). */
+function organizationSlugs(db: DatabaseSync): void {
+  const cols = db.prepare('PRAGMA table_info(organizations)').all() as Array<{ name: string }>;
+  if (cols.some((c) => c.name === 'slug')) return;
+  db.exec('ALTER TABLE organizations ADD COLUMN slug TEXT');
+  const rows = db.prepare('SELECT id, name FROM organizations').all() as Array<{ id: string; name: string }>;
+  const used = new Set<string>();
+  for (const row of rows) {
+    const base = slugifyOrganizationName(row.name || 'shul');
+    let slug = base;
+    let n = 2;
+    while (used.has(slug) || db.prepare('SELECT 1 FROM organizations WHERE slug = ?').get(slug)) {
+      slug = `${base}-${n}`;
+      n++;
+    }
+    used.add(slug);
+    db.prepare('UPDATE organizations SET slug = ? WHERE id = ?').run(slug, row.id);
+  }
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_organizations_slug ON organizations(slug);');
+}
+
+/** 8 — One login, many shuls: org_memberships; users hold email + password only. */
+function orgMemberships(db: DatabaseSync): void {
+  const hasTable = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'org_memberships'").get();
+  if (hasTable) return;
+
+  db.exec(`
+    CREATE TABLE org_memberships (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      orgId TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      role TEXT NOT NULL,
+      memberId TEXT REFERENCES members(id) ON DELETE SET NULL,
+      status TEXT NOT NULL,
+      name TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      UNIQUE (orgId, userId)
+    );
+    CREATE INDEX idx_memberships_user ON org_memberships(userId);
+    CREATE INDEX idx_memberships_org ON org_memberships(orgId);
+  `);
+
+  const users = db.prepare('SELECT * FROM users').all() as Array<Record<string, unknown>>;
+  const groups = new Map<string, Array<Record<string, unknown>>>();
+  for (const u of users) {
+    const key = String(u.email).trim().toLowerCase();
+    const list = groups.get(key) ?? [];
+    list.push(u);
+    groups.set(key, list);
+  }
+
+  for (const [, list] of groups) {
+    list.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    const canonical = list[0];
+    for (const u of list) {
+      db.prepare(
+        'INSERT INTO org_memberships (id, userId, orgId, role, memberId, status, name, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(
+        newId(),
+        String(canonical.id),
+        String(u.orgId),
+        String(u.role),
+        u.memberId != null ? String(u.memberId) : null,
+        String(u.status),
+        String(u.name),
+        String(u.createdAt),
+      );
+      if (String(u.id) !== String(canonical.id)) {
+        db.prepare('UPDATE sessions SET userId = ? WHERE userId = ?').run(String(canonical.id), String(u.id));
+        db.prepare('UPDATE userTokens SET userId = ? WHERE userId = ?').run(String(canonical.id), String(u.id));
+        db.prepare('UPDATE auditLog SET userId = ? WHERE userId = ?').run(String(canonical.id), String(u.id));
+      }
+    }
+  }
+
+  db.exec(`
+    CREATE TABLE users_new (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      passwordHash TEXT,
+      createdAt TEXT NOT NULL,
+      lastLoginAt TEXT
+    );
+  `);
+  for (const [, list] of groups) {
+    list.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    const canonical = list[0];
+    let passwordHash = canonical.passwordHash;
+    for (const u of list) {
+      if (!passwordHash && u.passwordHash) passwordHash = u.passwordHash;
+    }
+    db.prepare('INSERT INTO users_new (id, email, passwordHash, createdAt, lastLoginAt) VALUES (?, ?, ?, ?, ?)').run(
+      String(canonical.id),
+      String(canonical.email),
+      passwordHash != null ? String(passwordHash) : null,
+      String(canonical.createdAt),
+      canonical.lastLoginAt != null ? String(canonical.lastLoginAt) : null,
+    );
+  }
+  db.exec('DROP TABLE users; ALTER TABLE users_new RENAME TO users;');
+
+  db.exec('ALTER TABLE userTokens ADD COLUMN orgId TEXT REFERENCES organizations(id) ON DELETE CASCADE;');
+  log.info('migration 8: org_memberships created; duplicate emails merged to one login');
+}
+
 const MIGRATIONS: Migration[] = [
   { version: 1, name: 'baseline', ownTransactions: true, up: baseline },
   { version: 2, name: 'settings and files', foreignKeysOff: true, up: settingsAndFiles },
   { version: 3, name: 'events, RSVPs, email log', up: eventsAndEmail },
   { version: 4, name: 'users, sessions, audit log', up: usersAndAudit },
   { version: 5, name: 'sponsorships', up: sponsorships },
+  { version: 6, name: 'logical multi-tenant', foreignKeysOff: true, up: logicalMultiTenant },
+  { version: 7, name: 'organization slugs', up: organizationSlugs },
+  { version: 8, name: 'org memberships', foreignKeysOff: true, up: orgMemberships },
 ];
 
 /** The schema version this code expects. */

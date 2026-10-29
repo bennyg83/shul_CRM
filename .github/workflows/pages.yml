@@ -1,0 +1,50 @@
+# Build the web app for GitHub Pages and point it at the Tailscale HTTPS API on the mini PC.
+#
+# Repo settings → Pages → Build and deployment: GitHub Actions.
+# Repository variables (Settings → Secrets and variables → Actions → Variables):
+#   VITE_API_BASE_URL  e.g. https://crm-mini-1.tail34e202.ts.net/api
+# Optional if the repo name differs from shul_CRM:
+#   VITE_BASE_PATH     e.g. /shul_CRM/
+
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Build web (split origin)
+        env:
+          # Override in repo Variables if the tailnet hostname changes.
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'https://crm-mini-1.tail34e202.ts.net/api' }}
+          VITE_BASE_PATH: /shul_CRM/
+        run: npm run build -w @shulcrm/web
+      - name: SPA fallback for GitHub Pages
+        run: cp apps/web/dist/index.html apps/web/dist/404.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4

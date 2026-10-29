@@ -87,7 +87,7 @@ interface Context {
   families: Family[];
   members: Member[];
   usOrder: boolean;
-  lists: ReturnType<typeof getLookups>;
+  lists: Awaited<ReturnType<typeof getLookups>>;
   defaultCurrency: string;
 }
 
@@ -99,13 +99,14 @@ interface Analyzed {
   newFamily?: string;
 }
 
-function context(): Context {
+async function context(): Promise<Context> {
+  const org = await getOrg();
   return {
-    families: repo.families.list(),
-    members: repo.members.list(),
-    usOrder: getOrg().locale.toLowerCase().startsWith('en-us'),
-    lists: getLookups(),
-    defaultCurrency: getOrg().defaultCurrency,
+    families: await repo.families.list(),
+    members: await repo.members.list(),
+    usOrder: org.locale.toLowerCase().startsWith('en-us'),
+    lists: await getLookups(),
+    defaultCurrency: org.defaultCurrency,
   };
 }
 
@@ -276,31 +277,48 @@ function duplicateKey(entity: ImportEntity, r: Record<string, unknown>): string 
   }
 }
 
-function existingKeys(entity: ImportEntity): Set<string> {
+async function existingKeys(entity: ImportEntity): Promise<Set<string>> {
   const rows: Array<Record<string, unknown>> = (() => {
     switch (entity) {
       case 'families':
-        return repo.families.list();
+        return [] as Array<Record<string, unknown>>;
       case 'members':
-        return repo.members.list();
+        return [];
       case 'pledges':
-        return repo.pledges.list();
+        return [];
       case 'donations':
-        return repo.donations.list();
+        return [];
       case 'importantDates':
-        return repo.importantDates.list();
+        return [];
     }
   })();
+  switch (entity) {
+    case 'families':
+      rows.push(...(await repo.families.list()));
+      break;
+    case 'members':
+      rows.push(...(await repo.members.list()));
+      break;
+    case 'pledges':
+      rows.push(...(await repo.pledges.list()));
+      break;
+    case 'donations':
+      rows.push(...(await repo.donations.list()));
+      break;
+    case 'importantDates':
+      rows.push(...(await repo.importantDates.list()));
+      break;
+  }
   return new Set(rows.map((r) => duplicateKey(entity, r)));
 }
 
-function analyze(entity: ImportEntity, req: ImportRequest) {
+async function analyze(entity: ImportEntity, req: ImportRequest) {
   if (!Array.isArray(req.rows) || typeof req.mapping !== 'object' || req.mapping === null) {
     throw new BadRequest('Send rows and a column mapping');
   }
   if (req.rows.length > MAX_IMPORT_ROWS) throw new BadRequest(`At most ${MAX_IMPORT_ROWS} rows per import`);
-  const ctx = context();
-  const seen = existingKeys(entity);
+  const ctx = await context();
+  const seen = await existingKeys(entity);
   const analyzed = req.rows.map((row, i) => analyzeRow(entity, row.map(String), i, req, ctx));
   for (const a of analyzed) {
     if (!a.record) continue;
@@ -330,26 +348,26 @@ function summarizePreview(analyzed: Analyzed[], req: ImportRequest): ImportPrevi
   };
 }
 
-export function previewImport(entity: ImportEntity, req: ImportRequest): ImportPreview {
-  return summarizePreview(analyze(entity, req), req);
+export async function previewImport(entity: ImportEntity, req: ImportRequest): Promise<ImportPreview> {
+  return summarizePreview(await analyze(entity, req), req);
 }
 
-export function commitImport(entity: ImportEntity, req: ImportRequest): ImportResult {
-  const analyzed = analyze(entity, req);
+export async function commitImport(entity: ImportEntity, req: ImportRequest): Promise<ImportResult> {
+  const analyzed = await analyze(entity, req);
   const preview = summarizePreview(analyzed, req);
   const accepted = analyzed.filter(
     (a) => a.record && (a.result.status === 'ok' || (a.result.status === 'duplicate' && req.skipDuplicates === false)),
   );
 
-  db.exec('BEGIN');
+  await db.exec('BEGIN');
   try {
     const byList = new Map<LookupKind, string[]>();
     for (const i of preview.newListItems) byList.set(i.list, [...(byList.get(i.list) ?? []), i.key]);
-    for (const [list, keys] of byList) ensureLookupKeys(list, keys);
+    for (const [list, keys] of byList) await ensureLookupKeys(list, keys);
 
     const newFamilyIds = new Map<string, string>();
     for (const name of preview.newFamilies) {
-      const fam = repo.families.create({ name, status: 'active' });
+      const fam = await repo.families.create({ name, status: 'active' });
       newFamilyIds.set(`new:${norm(name)}`, fam.id);
     }
 
@@ -358,25 +376,25 @@ export function commitImport(entity: ImportEntity, req: ImportRequest): ImportRe
       if (typeof r.familyId === 'string' && r.familyId.startsWith('new:')) r.familyId = newFamilyIds.get(r.familyId);
       switch (entity) {
         case 'families':
-          repo.families.create(familyInputSchema.parse(r) as Parameters<typeof repo.families.create>[0]);
+          await repo.families.create(familyInputSchema.parse(r) as Parameters<typeof repo.families.create>[0]);
           break;
         case 'members':
-          repo.members.create(memberInputSchema.parse(r) as Parameters<typeof repo.members.create>[0]);
+          await repo.members.create(memberInputSchema.parse(r) as Parameters<typeof repo.members.create>[0]);
           break;
         case 'pledges':
-          repo.pledges.create(pledgeInputSchema.parse(r) as Parameters<typeof repo.pledges.create>[0]);
+          await repo.pledges.create(pledgeInputSchema.parse(r) as Parameters<typeof repo.pledges.create>[0]);
           break;
         case 'donations':
-          repo.donations.create(donationInputSchema.parse(r) as Parameters<typeof repo.donations.create>[0]);
+          await repo.donations.create(donationInputSchema.parse(r) as Parameters<typeof repo.donations.create>[0]);
           break;
         case 'importantDates':
-          repo.importantDates.create(importantDateInputSchema.parse(r) as Parameters<typeof repo.importantDates.create>[0]);
+          await repo.importantDates.create(importantDateInputSchema.parse(r) as Parameters<typeof repo.importantDates.create>[0]);
           break;
       }
     }
-    db.exec('COMMIT');
+    await db.exec('COMMIT');
   } catch (err) {
-    db.exec('ROLLBACK');
+    await db.exec('ROLLBACK');
     throw err;
   }
   return {
@@ -392,11 +410,11 @@ export function commitImport(entity: ImportEntity, req: ImportRequest): ImportRe
 // Export: one sheet per entity, headed by the import labels so it imports back.
 // ---------------------------------------------------------------------------
 
-export function exportTable(entity: ImportEntity): { headers: string[]; rows: Array<Array<string | number>> } {
+export async function exportTable(entity: ImportEntity): Promise<{ headers: string[]; rows: Array<Array<string | number>> }> {
   const spec = IMPORT_SPECS[entity];
-  const lists = getLookups();
-  const familyName = new Map(repo.families.list().map((f) => [f.id, f.name]));
-  const memberById = new Map(repo.members.list().map((m) => [m.id, m]));
+  const lists = await getLookups();
+  const familyName = new Map((await repo.families.list()).map((f) => [f.id, f.name]));
+  const memberById = new Map((await repo.members.list()).map((m) => [m.id, m]));
   const yesNo = (v: unknown) => (v === undefined ? '' : v ? 'Yes' : 'No');
 
   const value = (f: ImportField, r: Record<string, unknown>): string | number => {
@@ -419,17 +437,34 @@ export function exportTable(entity: ImportEntity): { headers: string[]; rows: Ar
   const records: Array<Record<string, unknown>> = (() => {
     switch (entity) {
       case 'families':
-        return repo.families.list();
+        return [] as Array<Record<string, unknown>>;
       case 'members':
-        return repo.members.list();
+        return [];
       case 'pledges':
-        return repo.pledges.list() as Pledge[];
+        return [] as Pledge[];
       case 'donations':
-        return repo.donations.list() as Donation[];
+        return [] as Donation[];
       case 'importantDates':
-        return repo.importantDates.list() as ImportantDate[];
+        return [] as ImportantDate[];
     }
   })();
+  switch (entity) {
+    case 'families':
+      records.push(...(await repo.families.list()));
+      break;
+    case 'members':
+      records.push(...(await repo.members.list()));
+      break;
+    case 'pledges':
+      records.push(...((await repo.pledges.list()) as Pledge[]));
+      break;
+    case 'donations':
+      records.push(...((await repo.donations.list()) as Donation[]));
+      break;
+    case 'importantDates':
+      records.push(...((await repo.importantDates.list()) as ImportantDate[]));
+      break;
+  }
 
   const headers = spec.fields.map((f) => f.label);
   const rows = records.map((r) => spec.fields.map((f) => value(f, r)));

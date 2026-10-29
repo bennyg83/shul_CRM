@@ -78,10 +78,11 @@ export function CalendarPage() {
     enabled: settings.features.events,
   });
   // Sponsorships sit on the calendar so the office can see at a glance which kiddushim are spoken for.
+  const showSponsorships = settings.features.events || settings.features.portal;
   const { data: monthSponsorships } = useQuery({
     queryKey: ['sponsorships', 'summary', from, to],
     queryFn: () => listSponsorships(from, to),
-    enabled: settings.features.events,
+    enabled: showSponsorships,
   });
   const sponsorshipsByDay = useMemo(() => {
     const map = new Map<string, SponsorshipSummary[]>();

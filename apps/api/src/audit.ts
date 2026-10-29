@@ -1,6 +1,7 @@
 import { newId, type AuditEntry } from '@shulcrm/shared';
 import { db } from './db.ts';
 import { currentUser } from './context.ts';
+import { resolveOrgId } from './tenant.ts';
 import { NotFound, get, insert, removeRow, update } from './repo.ts';
 import { BadRequest, Conflict } from './settings.ts';
 
@@ -10,22 +11,28 @@ import { BadRequest, Conflict } from './settings.ts';
 // It lives in the database (like the records it describes), not in the logs.
 // ---------------------------------------------------------------------------
 
-export function audit(action: string, details: { entity?: string; entityId?: string; summary?: string; changes?: unknown } = {}): void {
+export async function audit(
+  action: string,
+  details: { entity?: string; entityId?: string; summary?: string; changes?: unknown } = {},
+): Promise<void> {
   const user = currentUser();
-  db.prepare(
-    `INSERT INTO auditLog (id, at, userId, userName, action, entity, entityId, summary, changes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    newId(),
-    new Date().toISOString(),
-    user?.id ?? null,
-    user?.name ?? null,
-    action,
-    details.entity ?? null,
-    details.entityId ?? null,
-    details.summary ?? null,
-    details.changes === undefined ? null : JSON.stringify(details.changes),
-  );
+  await db
+    .prepare(
+      `INSERT INTO auditLog (id, orgId, at, userId, userName, action, entity, entityId, summary, changes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      newId(),
+      resolveOrgId(),
+      new Date().toISOString(),
+      user?.id ?? null,
+      user?.name ?? null,
+      action,
+      details.entity ?? null,
+      details.entityId ?? null,
+      details.summary ?? null,
+      details.changes === undefined ? null : JSON.stringify(details.changes),
+    );
 }
 
 /** Fields that differ between two versions of a record: field -> [before, after]. */
@@ -65,10 +72,15 @@ export function describe(entity: string, r: Record<string, unknown>): string {
   }
 }
 
-export function auditLog(query: { entity?: string; entityId?: string; limit?: number; before?: string; source?: string }): AuditEntry[] {
-  const where: string[] = [];
-  const params: string[] = [];
-  // "portal" means the changes families made about themselves, which is what staff review.
+export async function auditLog(query: {
+  entity?: string;
+  entityId?: string;
+  limit?: number;
+  before?: string;
+  source?: string;
+}): Promise<AuditEntry[]> {
+  const where: string[] = ['orgId = ?'];
+  const params: string[] = [resolveOrgId()];
   if (query.source === 'portal') where.push("action LIKE 'portal.%'");
   if (query.entity) {
     where.push('entity = ?');
@@ -83,9 +95,9 @@ export function auditLog(query: { entity?: string; entityId?: string; limit?: nu
     params.push(query.before);
   }
   const limit = Math.min(Math.max(query.limit ?? 100, 1), 500);
-  const rows = db
+  const rows = (await db
     .prepare(`SELECT * FROM auditLog ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY at DESC LIMIT ?`)
-    .all(...params, limit) as Array<Record<string, string | null>>;
+    .all(...params, limit)) as Array<Record<string, string | null>>;
   return rows.map((r) => ({
     id: String(r.id),
     at: String(r.at),
@@ -99,26 +111,17 @@ export function auditLog(query: { entity?: string; entityId?: string; limit?: nu
   }));
 }
 
-// ---------------------------------------------------------------------------
-// Undoing a change a family made about itself
-// ---------------------------------------------------------------------------
-
-/** Only what families change about themselves can be put back, and only on these records. */
 const UNDOABLE = new Set(['families', 'members', 'importantDates']);
 
-/** Every value in `changes` is a [before, after] pair (an update), rather than a whole record. */
 function isFieldDiff(changes: Record<string, unknown>): changes is Record<string, [unknown, unknown]> {
   const values = Object.values(changes);
   return values.length > 0 && values.every((v) => Array.isArray(v) && v.length === 2);
 }
 
-/**
- * Put back one change a family made through the portal. An edit is reverted field by field, a
- * new record is removed, and a deleted one is restored with its original id so anything that
- * pointed at it still does. Recorded in the log in its own right.
- */
-export function undo(entryId: string): { action: string; entity: string } {
-  const row = db.prepare('SELECT * FROM auditLog WHERE id = ?').get(entryId) as Record<string, string | null> | undefined;
+export async function undo(entryId: string): Promise<{ action: string; entity: string }> {
+  const row = (await db.prepare('SELECT * FROM auditLog WHERE id = ? AND orgId = ?').get(entryId, resolveOrgId())) as
+    | Record<string, string | null>
+    | undefined;
   if (!row) throw new NotFound('No such entry in the log');
   const entry: AuditEntry = {
     id: String(row.id),
@@ -134,29 +137,29 @@ export function undo(entryId: string): { action: string; entity: string } {
   if (!entry.changes) throw new BadRequest('This entry does not record what changed');
 
   const { entity, entityId, changes } = entry;
-  const exists = get<Record<string, unknown>>(entity, entityId) !== undefined;
+  const exists = (await get<Record<string, unknown>>(entity, entityId)) !== undefined;
 
-  db.exec('BEGIN');
+  await db.exec('BEGIN');
   try {
     if (entry.action === 'portal.update') {
       if (!isFieldDiff(changes)) throw new BadRequest('This entry does not record what changed');
       if (!exists) throw new Conflict('That record has since been deleted');
       const patch = Object.fromEntries(Object.entries(changes).map(([field, [before]]) => [field, before]));
-      update(entity, entityId, patch);
+      await update(entity, entityId, patch);
     } else if (entry.action === 'portal.create') {
-      if (exists) removeRow(entity, entityId);
+      if (exists) await removeRow(entity, entityId);
     } else if (entry.action === 'portal.delete') {
       if (exists) throw new Conflict('That record is already back');
-      insert(entity, changes as object);
+      await insert(entity, changes as object);
     } else {
       throw new BadRequest('This change cannot be put back');
     }
-    db.exec('COMMIT');
+    await db.exec('COMMIT');
   } catch (err) {
-    db.exec('ROLLBACK');
+    await db.exec('ROLLBACK');
     throw err;
   }
 
-  audit('undo', { entity, entityId, summary: `Put back: ${entry.summary ?? entry.action}`, changes: { undid: entry.id } });
+  await audit('undo', { entity, entityId, summary: `Put back: ${entry.summary ?? entry.action}`, changes: { undid: entry.id } });
   return { action: entry.action, entity };
 }

@@ -8,8 +8,8 @@ import { useBranding } from '@/features/auth/branding';
  * The centered card every sign-in screen sits in, with the shul's branding on top.
  * Shared by LoginPage, SetupPage and WelcomePage so all three look like one place.
  */
-export function AuthLayout({ children }: { children: ReactNode }) {
-  const { data: branding } = useBranding();
+export function AuthLayout({ children, orgSlug }: { children: ReactNode; orgSlug?: string }) {
+  const { data: branding } = useBranding(orgSlug);
   const name = branding?.name ?? 'Synagogue CRM';
   const color = branding?.primaryColor ?? '#1f4e5f';
 
@@ -29,7 +29,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
             {branding?.hasLogo ? (
               <Box
                 component="img"
-                src={logoUrl(branding.logoVersion)}
+                src={logoUrl(branding.logoVersion, orgSlug ?? branding.slug)}
                 alt={`${name} logo`}
                 sx={{ width: 64, height: 64, objectFit: 'contain', borderRadius: 1 }}
               />

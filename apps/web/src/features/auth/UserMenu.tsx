@@ -9,9 +9,9 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ROLE_LABEL } from '@shulcrm/shared';
-import { logout } from '@/features/core/service';
+import { getAuthMemberships, logout, switchOrganization } from '@/features/core/service';
 import { SESSION_KEY, useAuth } from '@/features/auth/useAuth';
 import { ChangePasswordDialog } from '@/features/auth/ChangePasswordDialog';
 import { initials } from '@/app/initials';
@@ -21,8 +21,21 @@ export function UserMenu() {
   const queryClient = useQueryClient();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [changing, setChanging] = useState(false);
+  const { data: membershipInfo } = useQuery({
+    queryKey: ['auth', 'memberships'],
+    queryFn: getAuthMemberships,
+    enabled: Boolean(user),
+  });
+  const switchable =
+    membershipInfo && membershipInfo.organizations.length > 1 ? membershipInfo : undefined;
 
   if (!user) return null;
+
+  const pickOrg = async (orgSlug: string) => {
+    setAnchor(null);
+    await switchOrganization(orgSlug);
+    await queryClient.invalidateQueries();
+  };
 
   const signOut = async () => {
     setAnchor(null);
@@ -66,6 +79,24 @@ export function UserMenu() {
             {ROLE_LABEL[user.role]}
           </Typography>
         </Box>
+        {switchable ? (
+          <>
+            <Divider />
+            <Typography variant="caption" sx={{ px: 2, pt: 1, display: 'block', color: 'text.secondary' }}>
+              Switch community
+            </Typography>
+            {switchable.organizations.map((org) => (
+              <MenuItem
+                key={org.slug}
+                disabled={org.slug === switchable.currentSlug}
+                onClick={() => void pickOrg(org.slug)}
+              >
+                {org.name}
+                {org.slug === switchable.currentSlug ? ' (current)' : ''}
+              </MenuItem>
+            ))}
+          </>
+        ) : null}
         <Divider />
         <MenuItem
           onClick={() => {

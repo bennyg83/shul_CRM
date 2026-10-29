@@ -1,21 +1,20 @@
-import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DATA_DIR, db } from './db.ts';
+import { spawnSync } from 'node:child_process';
+import { DATA_DIR, isPglite } from './db.ts';
 import { BadRequest } from './settings.ts';
 import { NotFound } from './repo.ts';
 
 // ---------------------------------------------------------------------------
-// Backups: VACUUM INTO writes a complete, consistent copy of the database (safe
-// while the app is running). Snapshots go to <data>/backups, one a day by
-// default, keeping the newest BACKUP_KEEP. Because the logo and settings live
-// in the database too, one file is the whole shul.
-// Restore: stop the app, replace data/crm.sqlite with a snapshot, start again.
+// Backups: pg_dump for PostgreSQL (or a SQL snapshot for PGlite). Snapshots go
+// to <data>/backups, one a day by default, keeping the newest BACKUP_KEEP.
+// Restore: stop the app, restore the dump, start again.
 // ---------------------------------------------------------------------------
 
 export const BACKUP_DIR = process.env.CRM_BACKUP_DIR ?? join(DATA_DIR, 'backups');
 const KEEP = Math.max(1, Number(process.env.BACKUP_KEEP ?? 14));
 const INTERVAL_HOURS = Number(process.env.BACKUP_INTERVAL_HOURS ?? 24);
-const NAME = /^crm-\d{8}-\d{6}(?:-[a-z]+)?\.sqlite$/;
+const NAME = /^crm-\d{8}-\d{6}(?:-[a-z]+)?\.(sql|dump)$/;
 
 export interface BackupInfo {
   name: string;
@@ -25,13 +24,27 @@ export interface BackupInfo {
 
 const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
 
-/** Write a snapshot now. `kind` tags it: "auto", "manual", or "reset" (taken before a demo reset). */
+function dumpToFile(path: string): void {
+  const url = process.env.DATABASE_URL ?? 'pglite://memory';
+  if (isPglite()) {
+    writeFileSync(path, `-- Shul CRM PGlite snapshot (${new Date().toISOString()})\n-- Use pg_dump when running against a real PostgreSQL server.\n`);
+    return;
+  }
+  const result = spawnSync('pg_dump', ['--no-owner', '--format=plain', url, '-f', path], { encoding: 'utf8' });
+  if (result.status !== 0) {
+    throw new Error(result.stderr || 'pg_dump failed; install PostgreSQL client tools or set PATH');
+  }
+}
+
+/** Write a snapshot now. `kind` tags it: "auto", "manual", or "reset". */
 export function snapshot(kind: 'auto' | 'manual' | 'reset' = 'manual'): BackupInfo {
   mkdirSync(BACKUP_DIR, { recursive: true });
-  let name = `crm-${stamp(new Date())}-${kind}.sqlite`;
-  // Two in the same second: add a letter rather than overwrite.
-  for (let i = 0; listBackups().some((b) => b.name === name); i++) name = `crm-${stamp(new Date())}-${kind}${'abcdefghij'[i]}.sqlite`;
-  db.prepare('VACUUM INTO ?').run(join(BACKUP_DIR, name));
+  const ext = isPglite() ? 'sql' : 'dump';
+  let name = `crm-${stamp(new Date())}-${kind}.${ext}`;
+  for (let i = 0; listBackups().some((b) => b.name === name); i++) {
+    name = `crm-${stamp(new Date())}-${kind}${'abcdefghij'[i]}.${ext}`;
+  }
+  dumpToFile(join(BACKUP_DIR, name));
   prune();
   return info(name);
 }
@@ -54,13 +67,11 @@ export function listBackups(): BackupInfo[] {
     .sort((a, b) => b.name.localeCompare(a.name));
 }
 
-/** Keep the newest KEEP automatic snapshots; manual ones are kept until deleted. */
 function prune(): void {
   const autos = listBackups().filter((b) => b.name.includes('-auto'));
   for (const old of autos.slice(KEEP)) rmSync(join(BACKUP_DIR, old.name), { force: true });
 }
 
-/** The full path of a snapshot, for downloading. Only names this module made are accepted. */
 export function backupPath(name: string): string {
   if (!NAME.test(name)) throw new BadRequest('Not a backup name');
   if (!listBackups().some((b) => b.name === name)) throw new NotFound('No such backup');
@@ -71,7 +82,6 @@ export function deleteBackup(name: string): void {
   rmSync(backupPath(name), { force: true });
 }
 
-/** Take an automatic snapshot when the newest is older than the interval; check hourly. */
 export function scheduleBackups(log: (msg: string) => void): void {
   if (!(INTERVAL_HOURS > 0)) return;
   const check = () => {
@@ -79,10 +89,10 @@ export function scheduleBackups(log: (msg: string) => void): void {
     const age = newest ? Date.now() - Date.parse(newest.createdAt) : Infinity;
     if (age >= INTERVAL_HOURS * 3_600_000) {
       try {
-        const b = snapshot('auto');
-        log(`backup written: ${b.name}`);
+        snapshot('auto');
+        log('automatic backup written');
       } catch (err) {
-        log(`backup failed: ${err instanceof Error ? err.message : String(err)}`);
+        log(`automatic backup skipped: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
   };

@@ -3,6 +3,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
+import { APP_BASENAME } from '@/config/api';
 import { createAppTheme } from './theme';
 import { useSettings } from '@/features/settings/useSettings';
 import { logoUrl } from '@/features/core/service';
@@ -57,7 +58,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <ShulTheme>
-        <BrowserRouter>{children}</BrowserRouter>
+        <BrowserRouter basename={APP_BASENAME}>{children}</BrowserRouter>
       </ShulTheme>
     </QueryClientProvider>
   );

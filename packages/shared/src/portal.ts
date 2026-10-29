@@ -135,6 +135,13 @@ export const claimInputSchema = z.object({
 });
 export type ClaimInput = z.infer<typeof claimInputSchema>;
 
+/** Office registers a family on a sponsorship (same rules as the member portal claim). */
+export const staffClaimInputSchema = claimInputSchema.extend({
+  familyId: uuid(),
+  memberId: uuid().optional(),
+});
+export type StaffClaimInput = z.infer<typeof staffClaimInputSchema>;
+
 /**
  * A sponsorship with who has taken it. The office sees every claim; the portal is sent only the
  * family's own, so one family learns nothing about another beyond how many places are left.

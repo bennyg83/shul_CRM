@@ -1,16 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { rmSync } from 'node:fs';
 import request from 'supertest';
 import type { AuditEntry, Role } from '@shulcrm/shared';
 
 // The member portal over HTTP, against a throwaway database (set before db.ts loads; see repo.test.ts).
-const TEST_DATA_DIR = mkdtempSync(join(tmpdir(), 'crm-portal-test-'));
-process.env.CRM_DATA_DIR = TEST_DATA_DIR;
+import { freshTestDatabase } from './testing/test-env.ts';
+
+const TEST_DATA_DIR = await freshTestDatabase('crm-portal-test-');
 
 const { app, prepareData } = await import('./app.ts');
-const { db } = await import('./db.ts');
+const { closeDatabase } = await import('./db.ts');
 const api = request(app);
 
 const OWNER = { name: 'Rivka Stern', email: 'owner@shul.test', password: 'correct horse battery' };
@@ -108,9 +107,9 @@ beforeAll(async () => {
   await setPortal(true);
 });
 
-afterAll(() => {
+afterAll(async () => {
   try {
-    db.close();
+    await closeDatabase();
     rmSync(TEST_DATA_DIR, { recursive: true, force: true });
   } catch {
     // Best-effort on Windows.
@@ -497,6 +496,29 @@ describe('sponsorships', () => {
 
   const pledgesOf = async (familyId: string) =>
     (await office<Row[]>('get', '/api/pledges')).filter((p) => p.familyId === familyId);
+
+  it('lets the office register a family the same way the portal would', async () => {
+    const s = await sponsorship({ title: 'Office Kiddush', suggestedAmount: 180, maxSponsors: 1 });
+    const registered = await office('post', `/api/sponsorships/${s.id}/claims`, {
+      familyId: famA.id,
+      dedication: 'L\'chaim',
+    });
+    expect(registered).toMatchObject({
+      familyId: famA.id,
+      amount: 180,
+      currency: 'GBP',
+      dedication: 'L\'chaim',
+    });
+    const pledge = (await pledgesOf(famA.id)).find((p) => p.id === registered.pledgeId);
+    expect(pledge).toMatchObject({ fund: 'Kiddush', amount: 180, familyId: famA.id, dueDate: '2027-01-02' });
+
+    const summary = await office<Array<{ id: string; claims: Array<{ familyName?: string }> }>>(
+      'get',
+      '/api/sponsorships/summary',
+    );
+    expect(summary.find((row) => row.id === s.id)?.claims[0].familyName).toBe('Portal Alpha');
+    expect((await seen(alpha, s.id))?.mine).toBe(true);
+  });
 
   it('shows the open slots, and claiming one creates the matching pledge', async () => {
     const s = await sponsorship({ title: 'Shabbos Kiddush', suggestedAmount: 250, maxSponsors: 1 });

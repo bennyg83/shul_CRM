@@ -46,6 +46,7 @@ import type {
   Terms,
   AuditEntry,
   ClaimInput,
+  StaffClaimInput,
   PortalAccount,
   PortalDateInput,
   PortalFamilyInput,
@@ -58,30 +59,38 @@ import type {
   Role,
   Session,
   User,
+  LoginOrganization,
+  OrganizationSummary,
+  CreateOrganizationInput,
 } from '@shulcrm/shared';
+import { API_BASE, apiFetch, apiUrl } from '@/config/api';
 
 // ---------------------------------------------------------------------------
 // API client — talks to @shulcrm/api over /api/* (Vite dev proxy -> :3000).
 // Replaces the old localStorage mock; page call sites are unchanged.
 // ---------------------------------------------------------------------------
 
-const API = '/api';
+const API = API_BASE;
 
 /** Fired when the API answers 401 to a signed-in page (the session ended). */
 export const SIGNED_OUT_EVENT = 'shulcrm:signed-out';
 
 export class ApiError extends Error {
   readonly status: number;
+  readonly code?: string;
+  readonly organizations?: LoginOrganization[];
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, extra?: { code?: string; organizations?: LoginOrganization[] }) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.code = extra?.code;
+    this.organizations = extra?.organizations;
   }
 }
 
 interface ApiErrorBody {
-  error?: { message?: string };
+  error?: { message?: string; code?: string; organizations?: LoginOrganization[] };
 }
 
 /** A PATCH body: fields set to `undefined` (cleared in a form) are sent as `null`, which the API
@@ -94,7 +103,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     const headers = new Headers(init?.headers);
     headers.set('content-type', 'application/json');
-    res = await fetch(`${API}${path}`, { ...init, headers });
+    res = await apiFetch(path, { ...init, headers });
   } catch (err) {
     throw new ApiError(0, err instanceof Error ? err.message : String(err));
   }
@@ -103,13 +112,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // Signed out (session expired, or disabled): let the app go back to the sign-in page.
     if (res.status === 401 && !path.startsWith('/auth/')) window.dispatchEvent(new Event(SIGNED_OUT_EVENT));
     let message = `Request failed: ${res.status} ${res.statusText}`;
+    let code: string | undefined;
+    let organizations: LoginOrganization[] | undefined;
     try {
       const body = (await res.json()) as ApiErrorBody;
       if (body.error?.message) message = body.error.message;
+      code = body.error?.code;
+      organizations = body.error?.organizations;
     } catch {
       // non-JSON error body — keep the default message
     }
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, { code, organizations });
   }
 
   if (res.status === 204) return undefined as T;
@@ -313,7 +326,7 @@ export function getLookupUsage(kind: LookupKind): Promise<Record<string, number>
 export async function uploadLogo(file: File): Promise<Settings> {
   let res: Response;
   try {
-    res = await fetch(`${API}/org/logo`, {
+    res = await apiFetch('/org/logo', {
       method: 'PUT',
       body: file,
       headers: { 'content-type': file.type || 'application/octet-stream' },
@@ -333,8 +346,13 @@ export function removeLogo(): Promise<void> {
 }
 
 /** URL of the uploaded logo; the version busts the browser cache after a change. */
-export const logoUrl = (version?: string) =>
-  `${API}/org/logo${version ? `?v=${encodeURIComponent(version)}` : ''}`;
+export const logoUrl = (version?: string, orgSlug?: string) => {
+  const params = new URLSearchParams();
+  if (orgSlug) params.set('org', orgSlug);
+  if (version) params.set('v', version);
+  const q = params.toString();
+  return apiUrl(`/org/logo${q ? `?${q}` : ''}`);
+};
 
 // ---------------------------------------------------------------------------
 // Import / export
@@ -346,7 +364,7 @@ export async function parseImportFile(
 ): Promise<{ headers: string[]; rows: string[][] }> {
   let res: Response;
   try {
-    res = await fetch(`${API}/import/parse`, {
+    res = await apiFetch('/import/parse', {
       method: 'POST',
       body: file,
       headers: { 'content-type': 'application/octet-stream' },
@@ -370,7 +388,7 @@ export function commitImport(entity: ImportEntity, req: ImportRequest): Promise<
 }
 
 export const exportUrl = (entity: ImportEntity, format: 'csv' | 'xlsx') =>
-  `${API}/export/${entity}?format=${format}`;
+  apiUrl(`/export/${entity}?format=${format}`);
 
 // ---------------------------------------------------------------------------
 // Events and RSVPs
@@ -484,12 +502,19 @@ export interface PublicBranding {
   locale: string;
   hasLogo: boolean;
   logoVersion?: string;
+  slug?: string;
 }
 
-export const getPublicBranding = () => request<PublicBranding>('/settings/public');
+export const getPublicBranding = (orgSlug?: string) =>
+  request<PublicBranding>(`/settings/public${orgSlug ? `?org=${encodeURIComponent(orgSlug)}` : ''}`);
+export const getLoginTargets = (email: string) =>
+  request<{ organizations: LoginOrganization[] }>(`/auth/login-targets?email=${encodeURIComponent(email)}`);
 export const getSession = () => request<Session>('/auth/session');
-export const login = (email: string, password: string) =>
-  request<Session>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+export const login = (email: string, password: string, orgSlug?: string) =>
+  request<Session>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password, ...(orgSlug ? { orgSlug } : {}) }),
+  });
 export const logout = () => request<void>('/auth/logout', { method: 'POST', body: '{}' });
 export const setupOwner = (input: { name: string; email: string; password: string; code?: string }) =>
   request<Session>('/auth/setup', { method: 'POST', body: JSON.stringify(input) });
@@ -499,6 +524,10 @@ export const acceptLink = (token: string, password: string) =>
   request<Session>(`/auth/token/${encodeURIComponent(token)}`, { method: 'POST', body: JSON.stringify({ password }) });
 export const changePassword = (currentPassword: string, newPassword: string) =>
   request<void>('/auth/password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
+export const getAuthMemberships = () =>
+  request<{ organizations: LoginOrganization[]; currentSlug?: string }>('/auth/memberships');
+export const switchOrganization = (orgSlug: string) =>
+  request<{ user: User }>('/auth/switch-org', { method: 'POST', body: JSON.stringify({ orgSlug }) });
 
 export const listUsers = () => request<User[]>('/users');
 export const inviteUser = (input: { name: string; email: string; role: Role; memberId?: string }) =>
@@ -507,6 +536,12 @@ export const updateUser = (id: string, patch: { role?: Role; status?: 'active' |
   request<User>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
 export const newUserLink = (id: string) =>
   request<{ user: User; link: string; purpose: 'invite' | 'reset' }>(`/users/${id}/link`, { method: 'POST', body: '{}' });
+
+export const listHostOrganizations = () => request<OrganizationSummary[]>('/host/organizations');
+export const suggestOrganizationSlug = (name: string) =>
+  request<{ slug: string }>(`/host/organizations/suggest-slug?name=${encodeURIComponent(name)}`);
+export const createOrganization = (input: CreateOrganizationInput) =>
+  request<OrganizationSummary>('/host/organizations', { method: 'POST', body: JSON.stringify(input) });
 
 export const getAuditLog = (
   query: { entity?: string; entityId?: string; before?: string; limit?: number; source?: 'portal' } = {},
@@ -534,6 +569,12 @@ export const deleteSponsorship = (id: string) => request<void>(`/sponsorships/${
 /** Release a claim as the office (the portal has its own, family-scoped version). */
 export const releaseClaim = (claimId: string) =>
   request<void>(`/sponsorships/claims/${claimId}`, { method: 'DELETE' });
+/** Register a family on a sponsorship from the office (same rules as the member portal). */
+export const registerSponsorshipClaim = (sponsorshipId: string, input: StaffClaimInput) =>
+  request<SponsorshipClaim>(`/sponsorships/${sponsorshipId}/claims`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 
 /** Put back one change a family made about itself. */
 export const undoChange = (auditId: string) =>

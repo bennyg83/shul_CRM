@@ -5,8 +5,9 @@ import { join } from 'node:path';
 import request from 'supertest';
 
 // The whole HTTP app, against a throwaway database (set before db.ts loads; see repo.test.ts).
-const TEST_DATA_DIR = mkdtempSync(join(tmpdir(), 'crm-http-test-'));
-process.env.CRM_DATA_DIR = TEST_DATA_DIR;
+import { freshTestDatabase } from './testing/test-env.ts';
+
+const TEST_DATA_DIR = await freshTestDatabase('crm-http-test-');
 
 // A stand-in for the built web app, so the static handler is exercised whether or not
 // apps/web/dist has been built (CI runs the tests before the build).
@@ -17,7 +18,7 @@ mkdirSync(join(TEST_WEB_DIR, 'assets'));
 writeFileSync(join(TEST_WEB_DIR, 'assets', 'index-abc123.js'), 'export default 1;\n');
 
 const { app, prepareData } = await import('./app.ts');
-const { db } = await import('./db.ts');
+const { closeDatabase } = await import('./db.ts');
 // Every /api route needs a signed-in user, so the agent keeps the session cookie for all of them.
 const api = request.agent(app);
 
@@ -28,9 +29,9 @@ beforeAll(async () => {
   expect(res.status).toBe(200);
 });
 
-afterAll(() => {
+afterAll(async () => {
   try {
-    db.close();
+    await closeDatabase();
     rmSync(TEST_DATA_DIR, { recursive: true, force: true });
     rmSync(TEST_WEB_DIR, { recursive: true, force: true });
   } catch {

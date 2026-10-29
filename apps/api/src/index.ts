@@ -1,4 +1,4 @@
-import { app, prepareData } from './app.ts';
+import { initDatabase } from './db.ts';
 import { scheduleBackups } from './backups.ts';
 import { log } from './log.ts';
 
@@ -8,6 +8,8 @@ import { log } from './log.ts';
 // Dev: `npm run dev:api` from the repo root (node --watch, port 3000).
 // ---------------------------------------------------------------------------
 
+await initDatabase();
+const { app, prepareData } = await import('./app.ts');
 await prepareData();
 scheduleBackups((msg) => log.info({ area: 'backup' }, msg));
 

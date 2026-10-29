@@ -17,7 +17,8 @@ import {
 } from '@shulcrm/shared';
 import { db } from './db.ts';
 import { NotFound, families, members } from './repo.ts';
-import { BadRequest, getLogo, getLookups, getOrg } from './settings.ts';
+import { BadRequest, getLogo, getLookups, getOrg, readJsonSetting, writeJsonSetting } from './settings.ts';
+import { resolveOrgId } from './tenant.ts';
 import { familyGreeting, receipt, statement, yahrzeitNotices } from './documents.ts';
 import { events } from './events.ts';
 
@@ -27,50 +28,34 @@ import { events } from './events.ts';
 // messages are rendered by nodemailer's JSON transport and logged as "test".
 // ---------------------------------------------------------------------------
 
-function readSetting<T>(key: string, fallback: T, parse: (v: unknown) => T): T {
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
-  if (!row) return fallback;
-  try {
-    return parse(JSON.parse(row.value));
-  } catch {
-    return fallback;
-  }
-}
+const getEmailSettings = (): Promise<EmailSettings> =>
+  readJsonSetting('email', emailSettingsSchema, () => DEFAULT_EMAIL_SETTINGS);
 
-function writeSetting(key: string, value: unknown): void {
-  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(
-    key,
-    JSON.stringify(value),
-  );
-}
-
-const getEmailSettings = (): EmailSettings => readSetting('email', DEFAULT_EMAIL_SETTINGS, (v) => emailSettingsSchema.parse(v));
-
-export function emailSettingsView(): EmailSettingsView {
-  const { password, ...rest } = getEmailSettings();
+export async function emailSettingsView(): Promise<EmailSettingsView> {
+  const { password, ...rest } = await getEmailSettings();
   return { ...rest, hasPassword: Boolean(password) };
 }
 
 /** Save SMTP settings. A missing or empty password keeps the saved one; `clearPassword` removes it. */
-export function saveEmailSettings(input: unknown): EmailSettingsView {
+export async function saveEmailSettings(input: unknown): Promise<EmailSettingsView> {
   const body = (input ?? {}) as Record<string, unknown>;
   const parsed = emailSettingsSchema.parse({ ...body, password: body.password || undefined });
-  const current = getEmailSettings();
+  const current = await getEmailSettings();
   const password = body.clearPassword ? undefined : (parsed.password ?? current.password);
-  writeSetting('email', { ...parsed, password });
+  await writeJsonSetting('email', { ...parsed, password });
   return emailSettingsView();
 }
 
-export function getTemplates(): EmailTemplate[] {
-  const saved = readSetting<EmailTemplate[]>('emailTemplates', [], (v) => emailTemplatesSchema.parse(v));
+export async function getTemplates(): Promise<EmailTemplate[]> {
+  const saved = await readJsonSetting('emailTemplates', emailTemplatesSchema, () => [] as EmailTemplate[]);
   // Built-in templates that were never saved (or were added in a newer version) still show.
   const keys = new Set(saved.map((t) => t.key));
   return [...saved, ...DEFAULT_EMAIL_TEMPLATES.filter((t) => !keys.has(t.key))];
 }
 
-export function saveTemplates(input: unknown): EmailTemplate[] {
+export async function saveTemplates(input: unknown): Promise<EmailTemplate[]> {
   const templates = emailTemplatesSchema.parse(input);
-  writeSetting('emailTemplates', templates);
+  await writeJsonSetting('emailTemplates', templates);
   return getTemplates();
 }
 
@@ -111,8 +96,8 @@ export function renderTemplate(subject: string, body: string, vars: Vars): { sub
   return { subject: text(subject).replace(/\s+/g, ' ').trim(), text: text(body), html };
 }
 
-function layout(inner: string, hasLogo: boolean): string {
-  const org = getOrg();
+async function layout(inner: string, hasLogo: boolean): Promise<string> {
+  const org = await getOrg();
   const footer = [org.name, org.address, [org.city, org.country].filter(Boolean).join(', '), org.phone, org.email]
     .filter(Boolean)
     .map((s) => escapeHtml(String(s)))
@@ -125,8 +110,8 @@ ${inner}
 </div></body></html>`;
 }
 
-const longDate = (iso: string) =>
-  new Date(`${iso}T00:00:00Z`).toLocaleDateString(getOrg().locale, { dateStyle: 'long', timeZone: 'UTC' });
+const longDate = async (iso: string) =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString((await getOrg()).locale, { dateStyle: 'long', timeZone: 'UTC' });
 
 function table(head: string[], rows: string[][]): Value {
   const text = [head.join(' | '), ...rows.map((r) => r.join(' | '))].join('\n');
@@ -147,41 +132,41 @@ interface Recipient {
   year?: number;
 }
 
-function familyEmail(family: Family): string | undefined {
+async function familyEmail(family: Family): Promise<string | undefined> {
   if (family.email) return family.email;
-  const heads = members
-    .list()
+  const heads = (await members.list())
     .filter((m) => m.familyId === family.id && m.status === 'active' && m.email)
     .sort((a, b) => Number(b.role === 'husband' || b.role === 'wife') - Number(a.role === 'husband' || a.role === 'wife'));
   return heads[0]?.email;
 }
 
-function variablesFor(r: Recipient): { vars: Vars; family: Family } {
-  const family = families.get(r.familyId);
+async function variablesFor(r: Recipient): Promise<{ vars: Vars; family: Family }> {
+  const family = await families.get(r.familyId);
   if (!family) throw new NotFound(`families ${r.familyId} not found`);
-  const org = getOrg();
-  const money = (n: number, c: string) => formatMoneyWith(getLookups().currencies, n, c);
-  const familyMembers = members.list().filter((m) => m.familyId === family.id);
+  const org = await getOrg();
+  const lookups = await getLookups();
+  const money = (n: number, c: string) => formatMoneyWith(lookups.currencies, n, c);
+  const familyMembers = (await members.list()).filter((m) => m.familyId === family.id);
   const vars: Vars = {
     'org.name': v(org.name),
     'org.address': v([org.address, org.city, org.country].filter(Boolean).join(', ')),
     'org.phone': v(org.phone),
     'org.email': v(org.email),
     'family.name': v(family.name),
-    'family.greeting': v(familyGreeting(family, familyMembers)),
-    today: v(longDate(new Date().toISOString().slice(0, 10))),
+    'family.greeting': v(await familyGreeting(family, familyMembers)),
+    today: v(await longDate(new Date().toISOString().slice(0, 10))),
   };
   if (r.donationId) {
-    const d = receipt(r.donationId);
+    const d = await receipt(r.donationId);
     if (d.family.id !== family.id) throw new BadRequest('That donation belongs to another family');
     Object.assign(vars, {
       'donation.amount': v(money(d.donation.amount, d.donation.currency)),
-      'donation.date': v(longDate(d.donation.date)),
+      'donation.date': v(await longDate(d.donation.date)),
       'donation.fund': v(d.fundLabel),
       'donation.method': v(d.methodLabel),
       'donation.receipt': table(
         ['Receipt', 'Date', 'Fund', 'Method', 'Amount'],
-        [[d.receiptNumber, longDate(d.donation.date), d.fundLabel, d.methodLabel, money(d.donation.amount, d.donation.currency)]],
+        [[d.receiptNumber, await longDate(d.donation.date), d.fundLabel, d.methodLabel, money(d.donation.amount, d.donation.currency)]],
       ),
     });
     if (org.taxId || org.receiptFooter) {
@@ -193,36 +178,36 @@ function variablesFor(r: Recipient): { vars: Vars; family: Family } {
     }
   }
   if (r.year !== undefined) {
-    const s = statement(family.id, r.year);
+    const s = await statement(family.id, r.year);
     const total = Object.entries(s.totals).map(([c, n]) => money(n, c)).join(' + ') || money(0, org.defaultCurrency);
     Object.assign(vars, {
       'statement.year': v(r.year),
       'statement.total': v(total),
       'statement.table': table(
         ['Receipt', 'Date', 'Fund', 'Amount'],
-        s.donations.map((d) => [d.receiptNumber, longDate(d.date), d.fundLabel, money(d.amount, d.currency)]),
+        await Promise.all(s.donations.map(async (d) => [d.receiptNumber, await longDate(d.date), d.fundLabel, money(d.amount, d.currency)])),
       ),
     });
   }
   if (r.importantDateId && r.occurrence) {
-    const notice = yahrzeitNotices(r.occurrence, r.occurrence).find((n) => n.date.id === r.importantDateId);
+    const notice = (await yahrzeitNotices(r.occurrence, r.occurrence)).find((n) => n.date.id === r.importantDateId);
     if (!notice) throw new BadRequest('No yahrzeit for that date on that day');
     Object.assign(vars, {
       'yahrzeit.name': v(notice.name),
       'yahrzeit.hebrewName': v(notice.hebrewName ?? notice.name),
       'yahrzeit.relationship': v(notice.relationship?.toLowerCase() ?? 'loved one'),
       'yahrzeit.member': v(`${notice.member.firstName} ${notice.member.lastName}`),
-      'yahrzeit.date': v(longDate(notice.occurrence.nextOccurrence)),
+      'yahrzeit.date': v(await longDate(notice.occurrence.nextOccurrence)),
       'yahrzeit.hebrewDate': v(notice.hebrewDate),
-      'yahrzeit.evening': v(longDate(notice.evening)),
+      'yahrzeit.evening': v(await longDate(notice.evening)),
     });
   }
   if (r.eventId) {
-    const e = events.get(r.eventId);
+    const e = await events.get(r.eventId);
     if (!e) throw new NotFound(`events ${r.eventId} not found`);
     Object.assign(vars, {
       'event.title': v(e.title),
-      'event.date': v(longDate(e.date)),
+      'event.date': v(await longDate(e.date)),
       'event.time': v(e.startTime ? ` at ${e.startTime}${e.endTime ? `–${e.endTime}` : ''}` : ''),
       'event.location': v(e.location ?? org.name),
     });
@@ -245,19 +230,22 @@ function transport(settings: EmailSettings) {
   });
 }
 
-function fromHeader(settings: EmailSettings): string {
-  const org = getOrg();
+async function fromHeader(settings: EmailSettings): Promise<string> {
+  const org = await getOrg();
   const address = settings.fromAddress || org.email;
   if (!address) throw new BadRequest('Set a "From" address in Settings → Email (or an email on the organization)');
   return `"${(settings.fromName || org.name).replace(/"/g, '')}" <${address}>`;
 }
 
-function log(entry: Omit<EmailLogEntry, 'id' | 'sentAt' | 'familyName'>): void {
-  db.prepare(
-    `INSERT INTO emailLog (id, toAddress, subject, template, familyId, status, error, testMode, sentAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
+async function log(entry: Omit<EmailLogEntry, 'id' | 'sentAt' | 'familyName'>): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO emailLog (id, orgId, toAddress, subject, template, familyId, status, error, testMode, sentAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
     newId(),
+    resolveOrgId(),
     entry.toAddress,
     entry.subject,
     entry.template ?? null,
@@ -271,21 +259,32 @@ function log(entry: Omit<EmailLogEntry, 'id' | 'sentAt' | 'familyName'>): void {
 
 export async function sendEmails(input: unknown): Promise<SendEmailResult> {
   const req = sendEmailSchema.parse(input);
-  const template = getTemplates().find((t) => t.key === req.template);
+  const templates = await getTemplates();
+  const template = templates.find((t) => t.key === req.template);
   if (!template) throw new BadRequest(`No email template "${req.template}"`);
-  const settings = getEmailSettings();
-  const logo = getLogo();
+  const settings = await getEmailSettings();
+  const logo = await getLogo();
 
-  const messages: RenderedEmail[] = req.recipients.map((r) => {
-    const { vars, family } = variablesFor(r);
-    const out = renderTemplate(req.subject ?? template.subject, req.body ?? template.body, vars);
-    const to = familyEmail(family);
-    return { familyId: family.id, familyName: family.name, to, subject: out.subject, text: out.text, html: layout(out.html, Boolean(logo)), problem: to ? undefined : 'No email address' };
-  });
+  const messages: RenderedEmail[] = await Promise.all(
+    req.recipients.map(async (r) => {
+      const { vars, family } = await variablesFor(r);
+      const out = renderTemplate(req.subject ?? template.subject, req.body ?? template.body, vars);
+      const to = await familyEmail(family);
+      return {
+        familyId: family.id,
+        familyName: family.name,
+        to,
+        subject: out.subject,
+        text: out.text,
+        html: await layout(out.html, Boolean(logo)),
+        problem: to ? undefined : 'No email address',
+      };
+    }),
+  );
   if (req.dryRun) return { messages, sent: 0, failed: 0, skipped: messages.filter((m) => m.problem).length, testMode: settings.testMode };
 
   const mailer = transport(settings);
-  const from = fromHeader(settings);
+  const from = await fromHeader(settings);
   let sent = 0;
   let failed = 0;
   for (const m of messages) {
@@ -301,12 +300,27 @@ export async function sendEmails(input: unknown): Promise<SendEmailResult> {
         attachments: logo ? [{ filename: 'logo', content: Buffer.from(logo.data), contentType: logo.contentType, cid: 'logo' }] : [],
       });
       sent++;
-      log({ toAddress: m.to, subject: m.subject, template: template.key, familyId: m.familyId, status: settings.testMode ? 'test' : 'sent', testMode: settings.testMode });
+      await log({
+        toAddress: m.to,
+        subject: m.subject,
+        template: template.key,
+        familyId: m.familyId,
+        status: settings.testMode ? 'test' : 'sent',
+        testMode: settings.testMode,
+      });
     } catch (err) {
       failed++;
       const error = err instanceof Error ? err.message : String(err);
       m.problem = error;
-      log({ toAddress: m.to, subject: m.subject, template: template.key, familyId: m.familyId, status: 'failed', error, testMode: settings.testMode });
+      await log({
+        toAddress: m.to,
+        subject: m.subject,
+        template: template.key,
+        familyId: m.familyId,
+        status: 'failed',
+        error,
+        testMode: settings.testMode,
+      });
     }
   }
   return { messages, sent, failed, skipped: messages.filter((m) => !m.to).length, testMode: settings.testMode };
@@ -315,29 +329,31 @@ export async function sendEmails(input: unknown): Promise<SendEmailResult> {
 /** One test message to check the mail settings. */
 export async function sendTestEmail(to: unknown): Promise<{ ok: true; testMode: boolean }> {
   if (typeof to !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) throw new BadRequest('Enter the address to send the test to');
-  const settings = getEmailSettings();
-  const org = getOrg();
+  const settings = await getEmailSettings();
+  const org = await getOrg();
   const subject = `Test message from ${org.name}`;
   try {
     await transport(settings).sendMail({
-      from: fromHeader(settings),
+      from: await fromHeader(settings),
       to,
       subject,
       text: 'If you can read this, the mail settings work.',
-      html: layout('<p>If you can read this, the mail settings work.</p>', false),
+      html: await layout('<p>If you can read this, the mail settings work.</p>', false),
     });
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    log({ toAddress: to, subject, status: 'failed', error, testMode: settings.testMode });
+    await log({ toAddress: to, subject, status: 'failed', error, testMode: settings.testMode });
     throw new BadRequest(`The mail server said: ${error}`);
   }
-  log({ toAddress: to, subject, status: settings.testMode ? 'test' : 'sent', testMode: settings.testMode });
+  await log({ toAddress: to, subject, status: settings.testMode ? 'test' : 'sent', testMode: settings.testMode });
   return { ok: true, testMode: settings.testMode };
 }
 
-export function emailLog(limit = 200): EmailLogEntry[] {
-  const names = new Map(families.list().map((f) => [f.id, f.name]));
-  const rows = db.prepare('SELECT * FROM emailLog ORDER BY sentAt DESC LIMIT ?').all(limit) as Array<Record<string, unknown>>;
+export async function emailLog(limit = 200): Promise<EmailLogEntry[]> {
+  const names = new Map((await families.list()).map((f) => [f.id, f.name]));
+  const rows = (await db
+    .prepare('SELECT * FROM emailLog WHERE orgId = ? ORDER BY sentAt DESC LIMIT ?')
+    .all(resolveOrgId(), limit)) as Array<Record<string, unknown>>;
   return rows.map((r) => ({
     id: String(r.id),
     toAddress: String(r.toAddress),

@@ -22,6 +22,7 @@ import {
   type ImportRequest,
   daysBetweenISO,
   claimInputSchema,
+  staffClaimInputSchema,
   todayISO,
   type LookupKind,
   ROLES,
@@ -31,6 +32,7 @@ import {
   inviteSchema,
   loginSchema,
   setupSchema,
+  createOrganizationSchema,
   type Permission,
   type Session,
   type User,
@@ -59,11 +61,13 @@ import { log } from './log.ts';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import * as auth from './auth.ts';
-import { currentUser, runWithUser } from './context.ts';
+import { currentUser, runWithOrg, runWithUser } from './context.ts';
 import { audit, auditLog, describe, diff, undo as auditUndo } from './audit.ts';
+import * as orgs from './organizations.ts';
+import { ensureDefaultOrganization, listOrganizationIds, loadOrganizationIds } from './tenant.ts';
 
 // ---------------------------------------------------------------------------
-// Shul CRM — the API app (Express 4 + SQLite via repo.ts): routes, validation,
+// Shul CRM — the API app (Express 4 + PostgreSQL via repo.ts): routes, validation,
 // and the error shape. index.ts starts it; tests load it directly (supertest).
 // Web talks to /api/* (Vite dev proxy -> http://localhost:3000).
 // ---------------------------------------------------------------------------
@@ -101,13 +105,39 @@ app.use((req, res, next) => {
 // Behind an HTTPS proxy (Phase 7), trust its X-Forwarded-* so cookies get Secure.
 if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === '1' ? 1 : process.env.TRUST_PROXY);
 app.disable('x-powered-by');
-app.use(helmet());
 
-// No CORS headers: only pages served from this app (or the dev server) may call it. Changes must
-// also come from one of those pages: browsers send Origin on every non-GET request.
 const ALLOWED_ORIGINS = new Set(
   (process.env.ALLOWED_ORIGINS ?? 'http://localhost:5173,http://127.0.0.1:5173').split(',').map((s) => s.trim()).filter(Boolean),
 );
+const splitOrigin = [...ALLOWED_ORIGINS].some((o) => {
+  try {
+    return !['localhost', '127.0.0.1'].includes(new URL(o).hostname);
+  } catch {
+    return false;
+  }
+});
+
+app.use(
+  helmet({
+    crossOriginResourcePolicy: splitOrigin ? { policy: 'cross-origin' } : undefined,
+  }),
+);
+
+// CORS for GitHub Pages (or Vite dev): reflect allowed Origin and credentials; block other sites on writes.
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Vary', 'Origin');
+  }
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'content-type');
+    return res.status(204).end();
+  }
+  next();
+});
 app.use((req, _res, next) => {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
   const origin = req.headers.origin;
@@ -125,7 +155,10 @@ app.use((req, _res, next) => {
 
 // Who is signed in (from the session cookie), for the rest of the request.
 app.use((req, _res, next) => {
-  runWithUser(auth.sessionUser(auth.readSessionCookie(req)), next);
+  auth
+    .sessionUser(auth.readSessionCookie(req))
+    .then((user) => runWithUser(user, next))
+    .catch(next);
 });
 
 // Every API route needs a permission, a signed-in user, or is public. First match wins.
@@ -146,6 +179,7 @@ const RULES: Rule[] = [
   ['*', '/api/backups', 'backups'],
   ['*', '/api/reset', 'data.reset'],
   ['*', '/api/import', 'data.import'],
+  ['*', '/api/host/', 'organizations.manage'],
   ['*', '/api/portal', 'portal'],
   [['GET'], '/api/', 'records.read'],
   ['*', '/api/', 'records.write'],
@@ -198,55 +232,76 @@ function parsePatch(input: ZodObject<ZodRawShape>, body: unknown): Record<string
   return { ...input.partial().parse(fields), ...cleared };
 }
 
+const asyncRoute =
+  (fn: (req: express.Request, res: express.Response) => Promise<void>): express.RequestHandler =>
+  (req, res, next) => {
+    fn(req, res).catch(next);
+  };
+
 // Standard REST routes for one entity (list/create on /, get/patch/delete on /:id).
 // Entities without a `get` (pledges, donations, ...) simply skip GET /:id.
 function resourceRoutes<I>(
   entity: string,
   input: ZodObject<ZodRawShape>,
   e: {
-    list(): unknown[];
-    get?(id: string): unknown | undefined;
-    create(i: I): unknown;
-    update(id: string, patch: Partial<I>): unknown;
-    remove(id: string): boolean;
+    list(): Promise<unknown[]>;
+    get?(id: string): Promise<unknown | undefined>;
+    create(i: I): Promise<unknown>;
+    update(id: string, patch: Partial<I>): Promise<unknown>;
+    remove(id: string): Promise<boolean>;
   },
 ) {
   const router = express.Router();
-  router.get('/', (_req, res) => {
-    res.json(e.list());
-  });
-  router.post('/', (req, res) => {
-    const data = input.parse(req.body);
-    settings.checkLookups(entity, data);
-    const created = e.create(data as I) as Record<string, unknown>;
-    audit('create', { entity, entityId: String(created.id), summary: describe(entity, created), changes: created });
-    res.status(201).json(created);
-  });
+  router.get(
+    '/',
+    asyncRoute(async (_req, res) => {
+      res.json(await e.list());
+    }),
+  );
+  router.post(
+    '/',
+    asyncRoute(async (req, res) => {
+      const data = input.parse(req.body);
+      await settings.checkLookups(entity, data);
+      const created = (await e.create(data as I)) as Record<string, unknown>;
+      await audit('create', { entity, entityId: String(created.id), summary: describe(entity, created), changes: created });
+      res.status(201).json(created);
+    }),
+  );
   if (e.get) {
-    const get = e.get;
-    router.get('/:id', (req, res) => {
-      const row = get(req.params.id);
-      if (row === undefined) throw new repo.NotFound(`${req.originalUrl}: not found`);
-      res.json(row);
-    });
+    const getRow = e.get;
+    router.get(
+      '/:id',
+      asyncRoute(async (req, res) => {
+        const row = await getRow(req.params.id);
+        if (row === undefined) throw new repo.NotFound(`${req.originalUrl}: not found`);
+        res.json(row);
+      }),
+    );
   }
-  router.patch('/:id', (req, res) => {
-    const patch = parsePatch(input, req.body);
-    settings.checkLookups(entity, patch);
-    const before = repo.get<Record<string, unknown>>(entity, req.params.id);
-    const after = e.update(req.params.id, patch as Partial<I>) as Record<string, unknown>;
-    const changes = before ? diff(before, after) : {};
-    if (Object.keys(changes).length > 0) {
-      audit('update', { entity, entityId: req.params.id, summary: describe(entity, after), changes });
-    }
-    res.json(after);
-  });
-  router.delete('/:id', (req, res) => {
-    const before = repo.get<Record<string, unknown>>(entity, req.params.id);
-    if (!e.remove(req.params.id)) throw new repo.NotFound(`${req.originalUrl}: not found`);
-    if (before) audit('delete', { entity, entityId: req.params.id, summary: describe(entity, before), changes: before });
-    res.status(204).end();
-  });
+  router.patch(
+    '/:id',
+    asyncRoute(async (req, res) => {
+      const patch = parsePatch(input, req.body);
+      await settings.checkLookups(entity, patch);
+      const before = await repo.get<Record<string, unknown>>(entity, req.params.id);
+      const after = (await e.update(req.params.id, patch as Partial<I>)) as Record<string, unknown>;
+      const changes = before ? diff(before, after) : {};
+      if (Object.keys(changes).length > 0) {
+        await audit('update', { entity, entityId: req.params.id, summary: describe(entity, after), changes });
+      }
+      res.json(after);
+    }),
+  );
+  router.delete(
+    '/:id',
+    asyncRoute(async (req, res) => {
+      const before = await repo.get<Record<string, unknown>>(entity, req.params.id);
+      if (!(await e.remove(req.params.id))) throw new repo.NotFound(`${req.originalUrl}: not found`);
+      if (before) await audit('delete', { entity, entityId: req.params.id, summary: describe(entity, before), changes: before });
+      res.status(204).end();
+    }),
+  );
   return router;
 }
 
@@ -258,63 +313,95 @@ app.get('/api/health', (_req, res) => {
 // Sign-in, setup, invitations, users, audit log
 // ---------------------------------------------------------------------------
 
-const asyncRoute =
-  (fn: (req: express.Request, res: express.Response) => Promise<void>): express.RequestHandler =>
-  (req, res, next) => {
-    fn(req, res).catch(next);
-  };
-
 /** Start a session for `user` and answer with it. */
-function signIn(req: express.Request, res: express.Response, user: User): void {
-  auth.setSessionCookie(req, res, auth.startSession(user.id));
+async function signIn(req: express.Request, res: express.Response, user: User): Promise<void> {
+  auth.setSessionCookie(req, res, await auth.startSession(user.id, user.orgId));
   res.json({ user, needsSetup: false, setupNeedsCode: false } satisfies Session);
 }
 
-app.get('/api/auth/session', (req, res) => {
-  const needsSetup = auth.userCount() === 0;
-  res.json({ user: currentUser() ?? null, needsSetup, setupNeedsCode: needsSetup && auth.setupRequiresCode(req) } satisfies Session);
-});
+app.get(
+  '/api/auth/session',
+  asyncRoute(async (req, res) => {
+    const needsSetup = (await auth.userCount()) === 0;
+    res.json({ user: currentUser() ?? null, needsSetup, setupNeedsCode: needsSetup && auth.setupRequiresCode(req) } satisfies Session);
+  }),
+);
+app.get(
+  '/api/auth/login-targets',
+  tooMany,
+  asyncRoute(async (req, res) => {
+    const email = z.string().trim().email().parse(req.query.email);
+    res.json({ organizations: await orgs.loginTargets(email) });
+  }),
+);
 app.post(
   '/api/auth/login',
   tooMany,
   asyncRoute(async (req, res) => {
-    const { email: address, password } = loginSchema.parse(req.body);
+    const { email: address, password, orgSlug } = loginSchema.parse(req.body);
     try {
-      const user = await auth.login(address, password);
-      runWithUser(user, () => audit('login'));
-      signIn(req, res, user);
+      const user = await auth.login(address, password, orgSlug);
+      await runWithUser(user, async () => audit('login'));
+      await signIn(req, res, user);
     } catch (err) {
-      audit('login.failed', { summary: address.toLowerCase() });
+      if (!(err instanceof auth.ChooseOrgError)) {
+        await audit('login.failed', { summary: address.toLowerCase() });
+      }
       throw err;
     }
   }),
 );
-app.post('/api/auth/logout', (req, res) => {
-  if (currentUser()) audit('logout');
-  auth.endSession(auth.readSessionCookie(req));
-  auth.setSessionCookie(req, res, null);
-  res.status(204).end();
-});
+app.post(
+  '/api/auth/logout',
+  asyncRoute(async (req, res) => {
+    if (currentUser()) await audit('logout');
+    await auth.endSession(auth.readSessionCookie(req));
+    auth.setSessionCookie(req, res, null);
+    res.status(204).end();
+  }),
+);
+app.get(
+  '/api/auth/memberships',
+  asyncRoute(async (req, res) => {
+    const user = currentUser();
+    const organizations = await auth.membershipsForSession(auth.readSessionCookie(req));
+    const currentSlug = user ? (await orgs.getOrganizationById(user.orgId))?.slug : undefined;
+    res.json({ organizations, currentSlug });
+  }),
+);
+app.post(
+  '/api/auth/switch-org',
+  asyncRoute(async (req, res) => {
+    const orgSlug = z.string().trim().min(1).parse(req.body.orgSlug);
+    const user = await auth.switchOrganization(auth.readSessionCookie(req), orgSlug);
+    await runWithUser(user, async () => audit('login.switch-org', { summary: orgSlug }));
+    res.json({ user } satisfies Pick<Session, 'user'>);
+  }),
+);
 app.post(
   '/api/auth/setup',
   tooMany,
   asyncRoute(async (req, res) => {
     const user = await auth.setupOwner(req, setupSchema.parse(req.body));
-    runWithUser(user, () => audit('setup', { entity: 'users', entityId: user.id, summary: user.name }));
-    signIn(req, res, user);
+    await runWithUser(user, async () => audit('setup', { entity: 'users', entityId: user.id, summary: user.name }));
+    await signIn(req, res, user);
   }),
 );
-app.get('/api/auth/token/:token', tooMany, (req, res) => {
-  res.json(auth.describeToken(req.params.token));
-});
+app.get(
+  '/api/auth/token/:token',
+  tooMany,
+  asyncRoute(async (req, res) => {
+    res.json(await auth.describeToken(req.params.token));
+  }),
+);
 app.post(
   '/api/auth/token/:token',
   tooMany,
   asyncRoute(async (req, res) => {
     const { password } = acceptInviteSchema.parse(req.body);
     const user = await auth.useToken(req.params.token, password);
-    runWithUser(user, () => audit('password.set', { entity: 'users', entityId: user.id, summary: user.name }));
-    signIn(req, res, user);
+    await runWithUser(user, async () => audit('password.set', { entity: 'users', entityId: user.id, summary: user.name }));
+    await signIn(req, res, user);
   }),
 );
 app.post(
@@ -324,10 +411,36 @@ app.post(
     if (!user) throw new auth.AuthError(401, 'Please sign in');
     const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
     await auth.changePassword(user, currentPassword, newPassword);
-    // Other devices sign in again; this one stays signed in.
-    auth.endSessionsFor(user.id, auth.readSessionCookie(req));
-    audit('password.changed', { entity: 'users', entityId: user.id, summary: user.name });
+    await auth.endSessionsFor(user.id, auth.readSessionCookie(req));
+    await audit('password.changed', { entity: 'users', entityId: user.id, summary: user.name });
     res.status(204).end();
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Host: create and list shuls on this server
+// ---------------------------------------------------------------------------
+
+app.get(
+  '/api/host/organizations',
+  asyncRoute(async (_req, res) => {
+    res.json(await orgs.listOrganizations());
+  }),
+);
+app.post(
+  '/api/host/organizations',
+  asyncRoute(async (req, res) => {
+    const body = createOrganizationSchema.parse(req.body);
+    const organization = await auth.provisionOrganization(body);
+    await audit('host.organization.created', { entity: 'organizations', entityId: organization.id, summary: organization.name });
+    res.status(201).json(organization);
+  }),
+);
+app.get(
+  '/api/host/organizations/suggest-slug',
+  asyncRoute(async (req, res) => {
+    const name = z.string().trim().min(1).parse(req.query.name);
+    res.json({ slug: await orgs.suggestSlug(name) });
   }),
 );
 
@@ -335,160 +448,275 @@ const actor = () => currentUser() as User; // the access rules guarantee a user 
 const inviteLink = (req: express.Request, token: string) =>
   `${process.env.PUBLIC_URL?.replace(/\/$/, '') ?? `${req.protocol}://${req.headers.host ?? 'localhost'}`}/welcome/${token}`;
 
-app.get('/api/users', (_req, res) => {
-  res.json(auth.listUsers());
-});
-app.post('/api/users', (req, res) => {
-  const { user, token } = auth.invite(actor(), inviteSchema.parse(req.body));
-  audit('user.invited', { entity: 'users', entityId: user.id, summary: `${user.name} as ${user.role}` });
-  res.status(201).json({ user, link: inviteLink(req, token) });
-});
-app.patch('/api/users/:id', (req, res) => {
-  const patch = z
-    .object({ role: z.enum(ROLES).optional(), status: z.enum(['active', 'disabled']).optional(), name: z.string().trim().min(1).optional() })
-    .parse(req.body);
-  const before = auth.getUser(req.params.id);
-  const user = auth.updateUser(actor(), req.params.id, patch);
-  if (before) audit('user.changed', { entity: 'users', entityId: user.id, summary: user.name, changes: diff(before, user) });
-  res.json(user);
-});
-app.post('/api/users/:id/link', (req, res) => {
-  const { user, token, purpose } = auth.newLinkFor(actor(), req.params.id);
-  audit(purpose === 'invite' ? 'user.reinvited' : 'user.reset-link', { entity: 'users', entityId: user.id, summary: user.name });
-  res.json({ user, link: inviteLink(req, token), purpose });
-});
-app.get('/api/audit', (req, res) => {
-  const q = z
-    .object({
-      entity: z.string().optional(),
-      entityId: z.string().optional(),
-      before: z.string().optional(),
-      limit: z.coerce.number().optional(),
-      source: z.enum(['portal']).optional(),
-    })
-    .parse(req.query);
-  res.json(auditLog(q));
-});
+app.get(
+  '/api/users',
+  asyncRoute(async (_req, res) => {
+    res.json(await auth.listUsers(actor().orgId));
+  }),
+);
+app.post(
+  '/api/users',
+  asyncRoute(async (req, res) => {
+    const { user, token } = await auth.invite(actor(), inviteSchema.parse(req.body));
+    await audit('user.invited', { entity: 'users', entityId: user.id, summary: `${user.name} as ${user.role}` });
+    res.status(201).json({ user, link: inviteLink(req, token) });
+  }),
+);
+app.patch(
+  '/api/users/:id',
+  asyncRoute(async (req, res) => {
+    const patch = z
+      .object({ role: z.enum(ROLES).optional(), status: z.enum(['active', 'disabled']).optional(), name: z.string().trim().min(1).optional() })
+      .parse(req.body);
+    const before = await auth.getUser(req.params.id, actor().orgId);
+    const user = await auth.updateUser(actor(), req.params.id, patch);
+    if (before) await audit('user.changed', { entity: 'users', entityId: user.id, summary: user.name, changes: diff(before, user) });
+    res.json(user);
+  }),
+);
+app.post(
+  '/api/users/:id/link',
+  asyncRoute(async (req, res) => {
+    const { user, token, purpose } = await auth.newLinkFor(actor(), req.params.id);
+    await audit(purpose === 'invite' ? 'user.reinvited' : 'user.reset-link', { entity: 'users', entityId: user.id, summary: user.name });
+    res.json({ user, link: inviteLink(req, token), purpose });
+  }),
+);
+app.get(
+  '/api/audit',
+  asyncRoute(async (req, res) => {
+    const q = z
+      .object({
+        entity: z.string().optional(),
+        entityId: z.string().optional(),
+        before: z.string().optional(),
+        limit: z.coerce.number().optional(),
+        source: z.enum(['portal']).optional(),
+      })
+      .parse(req.query);
+    res.json(await auditLog(q));
+  }),
+);
 
-app.get('/api/dashboard/stats', (_req, res) => {
-  res.json(repo.dashboardStats());
-});
+app.get(
+  '/api/dashboard/stats',
+  asyncRoute(async (_req, res) => {
+    res.json(await repo.dashboardStats());
+  }),
+);
 
 // Shul settings: org profile, features, terms, lists, and the logo.
-app.get('/api/settings', (_req, res) => {
-  res.json(settings.getSettings());
-});
-// What the sign-in page needs: the shul's name, colors and logo. Nothing else is public.
-app.get('/api/settings/public', (_req, res) => {
-  const { org, hasLogo, logoVersion } = settings.getSettings();
-  res.json({ name: org.name, shortName: org.shortName, primaryColor: org.primaryColor, secondaryColor: org.secondaryColor, locale: org.locale, hasLogo, logoVersion });
-});
-app.put('/api/settings/org', (req, res) => {
-  const org = settings.saveOrg(req.body);
-  audit('settings.org', { summary: org.name });
-  res.json(org);
-});
-app.put('/api/settings/features', (req, res) => {
-  const features = settings.saveFeatures(req.body);
-  audit('settings.features', { changes: features });
-  res.json(features);
-});
-app.put('/api/settings/terms', (req, res) => {
-  const terms = settings.saveTerms(req.body);
-  audit('settings.terms', { changes: terms });
-  res.json(terms);
-});
-app.get('/api/settings/lookups/:kind/usage', (req, res) => {
-  if (!(LOOKUP_KINDS as readonly string[]).includes(req.params.kind)) throw new repo.NotFound('Unknown list');
-  res.json(settings.lookupUsage(req.params.kind as LookupKind));
-});
-app.put('/api/settings/lookups/:kind', (req, res) => {
-  const lookups = settings.saveLookup(req.params.kind, req.body);
-  audit('settings.list', { entity: req.params.kind, summary: `${req.params.kind} list saved` });
-  res.json(lookups);
-});
-app.get('/api/org/logo', (_req, res) => {
-  const logo = settings.getLogo();
-  if (!logo) throw new repo.NotFound('No logo has been uploaded');
-  res.setHeader('Content-Type', logo.contentType);
-  res.setHeader('Cache-Control', 'public, max-age=300');
-  res.setHeader('Last-Modified', new Date(logo.updatedAt).toUTCString());
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.send(Buffer.from(logo.data));
-});
+app.get(
+  '/api/settings',
+  asyncRoute(async (_req, res) => {
+    res.json(await settings.getSettings());
+  }),
+);
+app.get(
+  '/api/settings/public',
+  asyncRoute(async (req, res) => {
+    const slug = typeof req.query.org === 'string' ? req.query.org : undefined;
+    const respond = async () => {
+      const { org, hasLogo, logoVersion } = await settings.getSettings();
+      res.json({
+        name: org.name,
+        shortName: org.shortName,
+        primaryColor: org.primaryColor,
+        secondaryColor: org.secondaryColor,
+        locale: org.locale,
+        hasLogo,
+        logoVersion,
+        slug: (await orgs.getOrganizationById(org.orgId))?.slug,
+      });
+    };
+    if (slug) {
+      const org = await orgs.getOrganizationBySlug(slug);
+      if (!org) throw new repo.NotFound('No such community');
+      await runWithOrg(org.id, respond);
+      return;
+    }
+    await respond();
+  }),
+);
+app.put(
+  '/api/settings/org',
+  asyncRoute(async (req, res) => {
+    const org = await settings.saveOrg(req.body);
+    await audit('settings.org', { summary: org.name });
+    res.json(org);
+  }),
+);
+app.put(
+  '/api/settings/features',
+  asyncRoute(async (req, res) => {
+    const features = await settings.saveFeatures(req.body);
+    await audit('settings.features', { changes: features });
+    res.json(features);
+  }),
+);
+app.put(
+  '/api/settings/terms',
+  asyncRoute(async (req, res) => {
+    const terms = await settings.saveTerms(req.body);
+    await audit('settings.terms', { changes: terms });
+    res.json(terms);
+  }),
+);
+app.get(
+  '/api/settings/lookups/:kind/usage',
+  asyncRoute(async (req, res) => {
+    if (!(LOOKUP_KINDS as readonly string[]).includes(req.params.kind)) throw new repo.NotFound('Unknown list');
+    res.json(await settings.lookupUsage(req.params.kind as LookupKind));
+  }),
+);
+app.put(
+  '/api/settings/lookups/:kind',
+  asyncRoute(async (req, res) => {
+    const lookups = await settings.saveLookup(req.params.kind, req.body);
+    await audit('settings.list', { entity: req.params.kind, summary: `${req.params.kind} list saved` });
+    res.json(lookups);
+  }),
+);
+app.get(
+  '/api/org/logo',
+  asyncRoute(async (req, res) => {
+    const slug = typeof req.query.org === 'string' ? req.query.org : undefined;
+    const send = async () => {
+      const logo = await settings.getLogo();
+      if (!logo) throw new repo.NotFound('No logo has been uploaded');
+      res.setHeader('Content-Type', logo.contentType);
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.setHeader('Last-Modified', new Date(logo.updatedAt).toUTCString());
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.send(Buffer.from(logo.data));
+    };
+    if (slug) {
+      const org = await orgs.getOrganizationBySlug(slug);
+      if (!org) throw new repo.NotFound('No such community');
+      await runWithOrg(org.id, send);
+      return;
+    }
+    await send();
+  }),
+);
 app.put(
   '/api/org/logo',
   express.raw({ type: () => true, limit: settings.LOGO_MAX_BYTES + 1024 }),
-  (req, res) => {
-    settings.saveLogo(new Uint8Array(Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)));
-    audit('settings.logo', { summary: 'logo uploaded' });
-    res.json(settings.getSettings());
-  },
+  asyncRoute(async (req, res) => {
+    await settings.saveLogo(new Uint8Array(Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)));
+    await audit('settings.logo', { summary: 'logo uploaded' });
+    res.json(await settings.getSettings());
+  }),
 );
-app.delete('/api/org/logo', (_req, res) => {
-  settings.removeLogo();
-  audit('settings.logo', { summary: 'logo removed' });
-  res.status(204).end();
-});
+app.delete(
+  '/api/org/logo',
+  asyncRoute(async (_req, res) => {
+    await settings.removeLogo();
+    await audit('settings.logo', { summary: 'logo removed' });
+    res.status(204).end();
+  }),
+);
+
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 
 // Events and RSVPs. /summary is registered before the resource router so it isn't read as an id.
-app.get('/api/events/summary', (req, res) => {
-  const { from, to } = z.object({ from: isoDateSchema.optional(), to: isoDateSchema.optional() }).parse(req.query);
-  res.json(events.eventSummaries(from, to));
-});
-app.get('/api/events/:id/detail', (req, res) => {
-  res.json(events.eventDetail(req.params.id));
-});
+app.get(
+  '/api/events/summary',
+  asyncRoute(async (req, res) => {
+    const { from, to } = z.object({ from: isoDateSchema.optional(), to: isoDateSchema.optional() }).parse(req.query);
+    res.json(await events.eventSummaries(from, to));
+  }),
+);
+app.get(
+  '/api/events/:id/detail',
+  asyncRoute(async (req, res) => {
+    res.json(await events.eventDetail(req.params.id));
+  }),
+);
 app.use('/api/events', resourceRoutes<EventInput>('events', eventInputSchema, events.events));
-app.put('/api/rsvps', (req, res) => {
-  const rsvp = events.saveRsvp(rsvpInputSchema.parse(req.body));
-  audit('rsvp', { entity: 'events', entityId: rsvp.eventId, summary: `${rsvp.status}: ${rsvp.adults} adults, ${rsvp.children} children` });
-  res.json(rsvp);
-});
-app.delete('/api/rsvps/:id', (req, res) => {
-  if (!events.removeRsvp(req.params.id)) throw new repo.NotFound('RSVP not found');
-  res.status(204).end();
-});
+app.put(
+  '/api/rsvps',
+  asyncRoute(async (req, res) => {
+    const rsvp = await events.saveRsvp(rsvpInputSchema.parse(req.body));
+    await audit('rsvp', {
+      entity: 'events',
+      entityId: rsvp.eventId,
+      summary: `${rsvp.status}: ${rsvp.adults} adults, ${rsvp.children} children`,
+    });
+    res.json(rsvp);
+  }),
+);
+app.delete(
+  '/api/rsvps/:id',
+  asyncRoute(async (req, res) => {
+    if (!(await events.removeRsvp(req.params.id))) throw new repo.NotFound('RSVP not found');
+    res.status(204).end();
+  }),
+);
 
 // Printable documents (the web prints them; Save as PDF gives a PDF).
 const yearSchema = z.coerce.number().int().min(1900).max(2200);
-app.get('/api/documents/receipt/:donationId', (req, res) => {
-  res.json(documents.receipt(req.params.donationId));
-});
-app.get('/api/documents/statement/:familyId', (req, res) => {
-  res.json(documents.statement(req.params.familyId, yearSchema.parse(req.query.year)));
-});
-app.get('/api/documents/statements', (req, res) => {
-  res.json(documents.statements(yearSchema.parse(req.query.year)));
-});
-app.get('/api/documents/yahrzeits', (req, res) => {
-  const { from, to } = z.object({ from: isoDateSchema, to: isoDateSchema }).parse(req.query);
-  if (to < from || daysBetweenISO(from, to) > 400) throw new settings.BadRequest('Choose a range of at most 400 days');
-  res.json(documents.yahrzeitNotices(from, to));
-});
+app.get(
+  '/api/documents/receipt/:donationId',
+  asyncRoute(async (req, res) => {
+    res.json(await documents.receipt(req.params.donationId));
+  }),
+);
+app.get(
+  '/api/documents/statement/:familyId',
+  asyncRoute(async (req, res) => {
+    res.json(await documents.statement(req.params.familyId, yearSchema.parse(req.query.year)));
+  }),
+);
+app.get(
+  '/api/documents/statements',
+  asyncRoute(async (req, res) => {
+    res.json(await documents.statements(yearSchema.parse(req.query.year)));
+  }),
+);
+app.get(
+  '/api/documents/yahrzeits',
+  asyncRoute(async (req, res) => {
+    const { from, to } = z.object({ from: isoDateSchema, to: isoDateSchema }).parse(req.query);
+    if (to < from || daysBetweenISO(from, to) > 400) throw new settings.BadRequest('Choose a range of at most 400 days');
+    res.json(await documents.yahrzeitNotices(from, to));
+  }),
+);
 
 // Email: settings (password write-only), templates, sending, and the log.
-app.get('/api/email/settings', (_req, res) => {
-  res.json(email.emailSettingsView());
-});
-app.put('/api/email/settings', (req, res) => {
-  const view = email.saveEmailSettings(req.body);
-  audit('settings.email', { summary: view.testMode ? 'test mode' : 'live' });
-  res.json(view);
-});
-app.get('/api/email/templates', (_req, res) => {
-  res.json(email.getTemplates());
-});
-app.put('/api/email/templates', (req, res) => {
-  const templates = email.saveTemplates(req.body);
-  audit('settings.templates');
-  res.json(templates);
-});
+app.get(
+  '/api/email/settings',
+  asyncRoute(async (_req, res) => {
+    res.json(await email.emailSettingsView());
+  }),
+);
+app.put(
+  '/api/email/settings',
+  asyncRoute(async (req, res) => {
+    const view = await email.saveEmailSettings(req.body);
+    await audit('settings.email', { summary: view.testMode ? 'test mode' : 'live' });
+    res.json(view);
+  }),
+);
+app.get(
+  '/api/email/templates',
+  asyncRoute(async (_req, res) => {
+    res.json(await email.getTemplates());
+  }),
+);
+app.put(
+  '/api/email/templates',
+  asyncRoute(async (req, res) => {
+    const templates = await email.saveTemplates(req.body);
+    await audit('settings.templates');
+    res.json(templates);
+  }),
+);
 app.post('/api/email/send', async (req, res, next) => {
   try {
     const result = await email.sendEmails(req.body);
     const body = req.body as { template?: string; dryRun?: boolean };
-    if (!body.dryRun) audit('email.sent', { summary: `${body.template}: ${result.sent} sent, ${result.failed} failed` });
+    if (!body.dryRun) await audit('email.sent', { summary: `${body.template}: ${result.sent} sent, ${result.failed} failed` });
     res.json(result);
   } catch (err) {
     next(err);
@@ -501,25 +729,31 @@ app.post('/api/email/test', async (req, res, next) => {
     next(err);
   }
 });
-app.get('/api/email/log', (_req, res) => {
-  res.json(email.emailLog());
-});
+app.get(
+  '/api/email/log',
+  asyncRoute(async (_req, res) => {
+    res.json(await email.emailLog());
+  }),
+);
 
 // Reports, as JSON or CSV (?format=csv).
-app.get('/api/reports/:key', (req, res) => {
-  const key = req.params.key;
-  if (!REPORTS.some((r) => r.key === key)) throw new repo.NotFound(`No report "${key}"`);
-  const year = req.query.year === undefined ? new Date().getFullYear() : yearSchema.parse(req.query.year);
-  const table = reports.report(key as ReportKey, year);
-  if (req.query.format === 'csv') {
-    const name = `${settings.getOrg().shortName}-${key}-${year}`.replace(/[^\p{L}\p{N}._-]+/gu, '-');
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(name)}.csv`);
-    res.send(writeCsv(table.columns, table.rows));
-    return;
-  }
-  res.json(table);
-});
+app.get(
+  '/api/reports/:key',
+  asyncRoute(async (req, res) => {
+    const key = req.params.key;
+    if (!REPORTS.some((r) => r.key === key)) throw new repo.NotFound(`No report "${key}"`);
+    const year = req.query.year === undefined ? new Date().getFullYear() : yearSchema.parse(req.query.year);
+    const table = await reports.report(key as ReportKey, year);
+    if (req.query.format === 'csv') {
+      const name = `${(await settings.getOrg()).shortName}-${key}-${year}`.replace(/[^\p{L}\p{N}._-]+/gu, '-');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(name)}.csv`);
+      res.send(writeCsv(table.columns, table.rows));
+      return;
+    }
+    res.json(table);
+  }),
+);
 
 // Import (CSV or Excel): parse the upload, preview with a column mapping, then commit.
 // Export: every record of one kind as CSV or Excel, with the same column names.
@@ -547,18 +781,28 @@ app.post(
     res.json({ headers, rows });
   },
 );
-app.post('/api/import/:entity/preview', express.json({ limit: '20mb' }), (req, res) => {
-  res.json(importExport.previewImport(importEntity(req.params.entity), req.body as ImportRequest));
-});
-app.post('/api/import/:entity/commit', express.json({ limit: '20mb' }), (req, res) => {
-  const result = importExport.commitImport(importEntity(req.params.entity), req.body as ImportRequest);
-  audit('import', { entity: req.params.entity, summary: `${result.created} imported, ${result.skipped} skipped` });
-  res.json(result);
-});
-app.get('/api/export/:entity', (req, res) => {
+app.post(
+  '/api/import/:entity/preview',
+  express.json({ limit: '20mb' }),
+  asyncRoute(async (req, res) => {
+    res.json(await importExport.previewImport(importEntity(req.params.entity), req.body as ImportRequest));
+  }),
+);
+app.post(
+  '/api/import/:entity/commit',
+  express.json({ limit: '20mb' }),
+  asyncRoute(async (req, res) => {
+    const result = await importExport.commitImport(importEntity(req.params.entity), req.body as ImportRequest);
+    await audit('import', { entity: req.params.entity, summary: `${result.created} imported, ${result.skipped} skipped` });
+    res.json(result);
+  }),
+);
+app.get(
+  '/api/export/:entity',
+  asyncRoute(async (req, res) => {
   const entity = importEntity(req.params.entity);
-  const { headers, rows } = importExport.exportTable(entity);
-  const org = settings.getOrg();
+  const { headers, rows } = await importExport.exportTable(entity);
+  const org = await settings.getOrg();
   const stamp = new Date().toISOString().slice(0, 10);
   const base = `${org.shortName}-${entity}-${stamp}`.replace(/[^\p{L}\p{N}._-]+/gu, '-');
   // The install id travels with the export (ROADMAP ground rules: where a file came from).
@@ -572,126 +816,217 @@ app.get('/api/export/:entity', (req, res) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(base)}.csv`);
   res.send(writeCsv(headers, rows));
-});
+  }),
+);
 
 // Backups: snapshots of the whole database (one file), listed, made on demand, downloaded.
 app.get('/api/backups', (_req, res) => {
   res.json(backups.listBackups());
 });
-app.post('/api/backups', (_req, res) => {
-  const b = backups.snapshot('manual');
-  audit('backup.made', { summary: b.name });
-  res.status(201).json(b);
-});
+app.post(
+  '/api/backups',
+  asyncRoute(async (_req, res) => {
+    const b = backups.snapshot('manual');
+    await audit('backup.made', { summary: b.name });
+    res.status(201).json(b);
+  }),
+);
 app.get('/api/backups/:name/download', (req, res, next) => {
   res.download(backups.backupPath(req.params.name), req.params.name, (err) => {
     if (err && !res.headersSent) next(err);
   });
 });
-app.delete('/api/backups/:name', (req, res) => {
-  backups.deleteBackup(req.params.name);
-  audit('backup.deleted', { summary: req.params.name });
-  res.status(204).end();
-});
+app.delete(
+  '/api/backups/:name',
+  asyncRoute(async (req, res) => {
+    backups.deleteBackup(req.params.name);
+    await audit('backup.deleted', { summary: req.params.name });
+    res.status(204).end();
+  }),
+);
 
 // Sponsorships, the office side. /summary and /claims come first so they are not read as an id.
-app.get('/api/sponsorships/summary', (req, res) => {
-  const { from, to } = z.object({ from: isoDateSchema.optional(), to: isoDateSchema.optional() }).parse(req.query);
-  res.json(sponsorships.summaries(from, to));
-});
-app.delete('/api/sponsorships/claims/:id', (req, res) => {
-  sponsorships.release(req.params.id);
-  res.status(204).end();
-});
-app.get('/api/sponsorships', (_req, res) => {
-  res.json(sponsorships.sponsorships.list());
-});
-app.post('/api/sponsorships', (req, res) => {
-  const created = sponsorships.sponsorships.create(sponsorships.parseSponsorship(req.body));
-  audit('create', { entity: 'sponsorships', entityId: created.id, summary: `${created.title} on ${created.date}` });
-  res.status(201).json(created);
-});
-app.patch('/api/sponsorships/:id', (req, res) => {
-  const before = sponsorships.sponsorships.get(req.params.id);
-  if (!before) throw new repo.NotFound('No such sponsorship');
-  const after = sponsorships.sponsorships.update(req.params.id, sponsorships.parseSponsorship({ ...before, ...(req.body as object) }));
-  audit('update', { entity: 'sponsorships', entityId: after.id, summary: `${after.title} on ${after.date}`, changes: diff(before, after) });
-  res.json(after);
-});
-app.delete('/api/sponsorships/:id', (req, res) => {
-  const before = sponsorships.sponsorships.get(req.params.id);
-  if (!sponsorships.sponsorships.remove(req.params.id)) throw new repo.NotFound('No such sponsorship');
-  audit('delete', { entity: 'sponsorships', entityId: req.params.id, summary: before ? `${before.title} on ${before.date}` : req.params.id });
-  res.status(204).end();
-});
+app.get(
+  '/api/sponsorships/summary',
+  asyncRoute(async (req, res) => {
+    const { from, to } = z.object({ from: isoDateSchema.optional(), to: isoDateSchema.optional() }).parse(req.query);
+    res.json(await sponsorships.summaries(from, to));
+  }),
+);
+app.delete(
+  '/api/sponsorships/claims/:id',
+  asyncRoute(async (req, res) => {
+    await sponsorships.release(req.params.id);
+    res.status(204).end();
+  }),
+);
+app.post(
+  '/api/sponsorships/:id/claims',
+  asyncRoute(async (req, res) => {
+    const body = staffClaimInputSchema.parse(req.body);
+    const claim = await sponsorships.claim(req.params.id, body.familyId, body.memberId, body);
+    const family = await repo.families.get(body.familyId);
+    await audit('sponsorship.registered', {
+      entity: 'sponsorships',
+      entityId: req.params.id,
+      summary: family ? `${family.name} — ${claim.dedication ?? 'Kiddush registration'}` : claim.id,
+      changes: { familyId: body.familyId, amount: claim.amount, dedication: claim.dedication ?? null },
+    });
+    res.status(201).json(claim);
+  }),
+);
+app.get(
+  '/api/sponsorships',
+  asyncRoute(async (_req, res) => {
+    res.json(await sponsorships.sponsorships.list());
+  }),
+);
+app.post(
+  '/api/sponsorships',
+  asyncRoute(async (req, res) => {
+    const created = await sponsorships.sponsorships.create(await sponsorships.parseSponsorship(req.body));
+    await audit('create', { entity: 'sponsorships', entityId: created.id, summary: `${created.title} on ${created.date}` });
+    res.status(201).json(created);
+  }),
+);
+app.patch(
+  '/api/sponsorships/:id',
+  asyncRoute(async (req, res) => {
+    const before = await sponsorships.sponsorships.get(req.params.id);
+    if (!before) throw new repo.NotFound('No such sponsorship');
+    const after = await sponsorships.sponsorships.update(
+      req.params.id,
+      await sponsorships.parseSponsorship({ ...before, ...(req.body as object) }),
+    );
+    await audit('update', {
+      entity: 'sponsorships',
+      entityId: after.id,
+      summary: `${after.title} on ${after.date}`,
+      changes: diff(before, after),
+    });
+    res.json(after);
+  }),
+);
+app.delete(
+  '/api/sponsorships/:id',
+  asyncRoute(async (req, res) => {
+    const before = await sponsorships.sponsorships.get(req.params.id);
+    if (!(await sponsorships.sponsorships.remove(req.params.id))) throw new repo.NotFound('No such sponsorship');
+    await audit('delete', {
+      entity: 'sponsorships',
+      entityId: req.params.id,
+      summary: before ? `${before.title} on ${before.date}` : req.params.id,
+    });
+    res.status(204).end();
+  }),
+);
 
-// Put back one change a family made about itself.
-app.post('/api/audit/:id/undo', (req, res) => {
-  res.json(auditUndo(req.params.id));
-});
+app.post(
+  '/api/audit/:id/undo',
+  asyncRoute(async (req, res) => {
+    res.json(await auditUndo(req.params.id));
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // The member portal. Every route works out the family from the signed-in
 // user's own member record; none of them accepts a family id from the browser.
 // ---------------------------------------------------------------------------
-const portalScope = (): portal.PortalScope => portal.scope(currentUser());
+const portalScope = async () => portal.scope(currentUser());
 
-app.get('/api/portal/home', (_req, res) => {
-  res.json(portal.home(portalScope()));
-});
-app.patch('/api/portal/family', (req, res) => {
-  res.json(portal.updateFamily(portalScope(), req.body));
-});
-app.post('/api/portal/members', (req, res) => {
-  res.status(201).json(portal.addMember(portalScope(), req.body));
-});
-app.patch('/api/portal/members/:id', (req, res) => {
-  res.json(portal.updateMember(portalScope(), req.params.id, req.body));
-});
-app.post('/api/portal/dates', (req, res) => {
-  res.status(201).json(portal.addDate(portalScope(), req.body));
-});
-app.patch('/api/portal/dates/:id', (req, res) => {
-  res.json(portal.updateDate(portalScope(), req.params.id, req.body));
-});
-app.delete('/api/portal/dates/:id', (req, res) => {
-  portal.removeDate(portalScope(), req.params.id);
-  res.status(204).end();
-});
-app.get('/api/portal/account', (_req, res) => {
-  res.json(portal.account(portalScope()));
-});
-app.get('/api/portal/sponsorships', (req, res) => {
-  const scope = portalScope();
-  const { from, to } = z.object({ from: isoDateSchema.optional(), to: isoDateSchema.optional() }).parse(req.query);
-  res.json(sponsorships.summaries(from ?? todayISO(), to, scope.family.id));
-});
-app.post('/api/portal/sponsorships/:id/claim', (req, res) => {
-  const scope = portalScope();
-  portal.mustEdit(scope);
-  res.status(201).json(sponsorships.claim(req.params.id, scope.family.id, scope.member.id, claimInputSchema.parse(req.body)));
-});
-app.delete('/api/portal/claims/:id', (req, res) => {
-  const scope = portalScope();
-  portal.mustEdit(scope);
-  // Scoped to this family, so one family can never release another's.
-  sponsorships.release(req.params.id, scope.family.id);
-  res.status(204).end();
-});
+app.get(
+  '/api/portal/home',
+  asyncRoute(async (_req, res) => {
+    res.json(await portal.home(await portalScope()));
+  }),
+);
+app.patch(
+  '/api/portal/family',
+  asyncRoute(async (req, res) => {
+    res.json(await portal.updateFamily(await portalScope(), req.body));
+  }),
+);
+app.post(
+  '/api/portal/members',
+  asyncRoute(async (req, res) => {
+    res.status(201).json(await portal.addMember(await portalScope(), req.body));
+  }),
+);
+app.patch(
+  '/api/portal/members/:id',
+  asyncRoute(async (req, res) => {
+    res.json(await portal.updateMember(await portalScope(), req.params.id, req.body));
+  }),
+);
+app.post(
+  '/api/portal/dates',
+  asyncRoute(async (req, res) => {
+    res.status(201).json(await portal.addDate(await portalScope(), req.body));
+  }),
+);
+app.patch(
+  '/api/portal/dates/:id',
+  asyncRoute(async (req, res) => {
+    res.json(await portal.updateDate(await portalScope(), req.params.id, req.body));
+  }),
+);
+app.delete(
+  '/api/portal/dates/:id',
+  asyncRoute(async (req, res) => {
+    await portal.removeDate(await portalScope(), req.params.id);
+    res.status(204).end();
+  }),
+);
+app.get(
+  '/api/portal/account',
+  asyncRoute(async (_req, res) => {
+    res.json(await portal.account(await portalScope()));
+  }),
+);
+app.get(
+  '/api/portal/sponsorships',
+  asyncRoute(async (req, res) => {
+    const scope = await portalScope();
+    const { from, to } = z.object({ from: isoDateSchema.optional(), to: isoDateSchema.optional() }).parse(req.query);
+    res.json(await sponsorships.summaries(from ?? todayISO(), to, scope.family.id));
+  }),
+);
+app.post(
+  '/api/portal/sponsorships/:id/claim',
+  asyncRoute(async (req, res) => {
+    const scope = await portalScope();
+    portal.mustEdit(scope);
+    res.status(201).json(await sponsorships.claim(req.params.id, scope.family.id, scope.member.id, claimInputSchema.parse(req.body)));
+  }),
+);
+app.delete(
+  '/api/portal/claims/:id',
+  asyncRoute(async (req, res) => {
+    const scope = await portalScope();
+    portal.mustEdit(scope);
+    await sponsorships.release(req.params.id, scope.family.id);
+    res.status(204).end();
+  }),
+);
 
-app.post('/api/reset', (_req, res) => {
-  // A reset deletes every record, so keep a copy of what was there first.
-  backups.snapshot('reset');
-  repo.reseed();
-  audit('data.reset');
-  res.json({ ok: true });
-});
+app.post(
+  '/api/reset',
+  asyncRoute(async (_req, res) => {
+    backups.snapshot('reset');
+    await repo.reseed();
+    await audit('data.reset');
+    res.json({ ok: true });
+  }),
+);
 
 // Paged, searchable, sortable lists. Registered before the resource routers so /page isn't read as an id.
 for (const list of paging.PAGED_LISTS) {
-  app.get(`/api/${list}/page`, (req, res) => {
-    res.json(paging.page(list, req.query as Record<string, unknown>));
-  });
+  app.get(
+    `/api/${list}/page`,
+    asyncRoute(async (req, res) => {
+      res.json(await paging.page(list, req.query as Record<string, unknown>));
+    }),
+  );
 }
 app.use('/api/families', resourceRoutes<FamilyInput>('families', familyInputSchema, repo.families));
 app.use('/api/members', resourceRoutes<MemberInput>('members', memberInputSchema, repo.members));
@@ -700,20 +1035,25 @@ app.use('/api/donations', resourceRoutes<DonationInput>('donations', donationInp
 
 // Aggregate "upcoming" view across families. Registered before the resource
 // router so GET /upcoming is never captured by a /:id handler.
-app.get('/api/important-dates/upcoming', (req, res) => {
-  const days = Number(req.query.days ?? 90);
-  res.json(repo.upcomingImportantDates(Number.isFinite(days) && days > 0 ? Math.floor(days) : 90));
-});
+app.get(
+  '/api/important-dates/upcoming',
+  asyncRoute(async (req, res) => {
+    const days = Number(req.query.days ?? 90);
+    res.json(await repo.upcomingImportantDates(Number.isFinite(days) && days > 0 ? Math.floor(days) : 90));
+  }),
+);
 // Every occurrence in a date range (the calendar). At most about 13 months per request.
-const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
-app.get('/api/important-dates/occurrences', (req, res) => {
-  const { from, to } = z.object({ from: isoDateSchema, to: isoDateSchema }).parse(req.query);
-  if (to < from || daysBetweenISO(from, to) > 400) {
-    res.status(400).json({ error: { message: '`to` must be on or after `from`, at most 400 days later' } });
-    return;
-  }
-  res.json(repo.dateOccurrences(from, to));
-});
+app.get(
+  '/api/important-dates/occurrences',
+  asyncRoute(async (req, res) => {
+    const { from, to } = z.object({ from: isoDateSchema, to: isoDateSchema }).parse(req.query);
+    if (to < from || daysBetweenISO(from, to) > 400) {
+      res.status(400).json({ error: { message: '`to` must be on or after `from`, at most 400 days later' } });
+      return;
+    }
+    res.json(await repo.dateOccurrences(from, to));
+  }),
+);
 app.use(
   '/api/important-dates',
   resourceRoutes<ImportantDateInput>('importantDates', importantDateInputSchema, repo.importantDates),
@@ -722,13 +1062,19 @@ app.use('/api/notes', resourceRoutes<NoteInput>('notes', noteInputSchema, repo.n
 
 // Composed detail views (one entity + its related records, for the detail modals).
 // Registered after the resource routes; the two-segment path does not match GET /:id.
-app.get('/api/families/:id/detail', (req, res) => {
-  res.json(repo.familyDetail(req.params.id));
-});
+app.get(
+  '/api/families/:id/detail',
+  asyncRoute(async (req, res) => {
+    res.json(await repo.familyDetail(req.params.id));
+  }),
+);
 
-app.get('/api/members/:id/detail', (req, res) => {
-  res.json(repo.memberDetail(req.params.id));
-});
+app.get(
+  '/api/members/:id/detail',
+  asyncRoute(async (req, res) => {
+    res.json(await repo.memberDetail(req.params.id));
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // The built web app, so one install is one process on one port and one origin.
@@ -776,6 +1122,12 @@ app.use((req, res) => {
 
 // Single error shape for all non-2xx JSON responses (@shulcrm/shared apiErrorSchema).
 const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+  if (err instanceof auth.ChooseOrgError) {
+    res.status(err.status).json({
+      error: { message: err.message, code: 'choose_org', organizations: err.organizations },
+    });
+    return;
+  }
   if (err instanceof auth.AuthError) {
     res.status(err.status).json({ error: { message: err.message } });
     return;
@@ -816,13 +1168,21 @@ app.use(errorHandler);
 
 /** First boot: seed the demo data (the database starts empty); then align the lists with the data. */
 export async function prepareData(): Promise<void> {
-  if (repo.families.list().length === 0) {
-    repo.reseed();
-    log.info('seeded demo data');
+  await loadOrganizationIds();
+  if (listOrganizationIds().length === 0) await ensureDefaultOrganization();
+  await loadOrganizationIds();
+  for (const orgId of listOrganizationIds()) {
+    await runWithOrg(orgId, async () => {
+      if ((await repo.families.list()).length === 0) {
+        await repo.reseed();
+        log.info({ orgId }, 'seeded demo data');
+      }
+      await settings.reconcileLookups();
+    });
   }
-  settings.reconcileLookups();
   await auth.ownerFromEnv();
-  auth.prepareSetup();
+  await auth.hostFromEnv();
+  await auth.prepareSetup();
 }
 
 export { app };

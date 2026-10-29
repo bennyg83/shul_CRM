@@ -1,37 +1,30 @@
 import { z } from 'zod';
 import type { Donation, Family, Member, Page, PledgeRow } from '@shulcrm/shared';
 import { db } from './db.ts';
+import { quoteIdent, rewriteSortClause } from './database/sql-dialect.ts';
+import { resolveOrgId } from './tenant.ts';
 
 // ---------------------------------------------------------------------------
 // Paged lists with search and sort, done in SQL so large shuls stay fast.
-// Sort keys and filters are whitelisted per list; search words must each match
-// one of the list's search columns (case-insensitive LIKE).
 // ---------------------------------------------------------------------------
 
 type Row = Record<string, unknown>;
 
 interface PageSpec {
   table: string;
-  /** SQL expressions searched by `q`. */
   search: string[];
-  /** Sort key -> SQL expression. */
   sort: Record<string, string>;
   defaultSort: string;
-  /** Tie-breakers after the chosen sort, so pages are stable. */
   then: string;
-  /** Filter name -> SQL condition with one `?`. */
   filters: Record<string, string>;
-  /** Extra selected columns (computed). */
   extra?: string;
-  /** Per-currency totals of `amount` over the whole filtered set. */
   totals?: boolean;
-  /** Fill in anything that needs a second query, once for the whole page. */
-  enrich?(rows: Row[]): void;
-  /** Turn a raw row into the API's shape. */
+  enrich?(rows: Row[]): Promise<void>;
   map(row: Row): unknown;
 }
 
-const familyName = (alias: string) => `(SELECT f.name FROM families f WHERE f.id = ${alias}.familyId)`;
+const familyName = (alias: string) =>
+  `(SELECT f.name FROM families f WHERE f.id = ${quoteIdent(alias)}.${quoteIdent('familyId')})`;
 
 const clean = (row: Row): Row => {
   const out: Row = {};
@@ -76,23 +69,22 @@ const SPECS = {
     defaultSort: 'year',
     then: 'createdAt DESC, id',
     filters: { familyId: 'familyId = ?', year: 'year = ?', fund: 'fund = ?', currency: 'currency = ?' },
-    extra: `, ${familyName('pledges')} AS familyName,
-      COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.pledgeId = pledges.id AND d.currency = pledges.currency), 0) AS paid`,
+    extra: `, ${familyName('pledges')} AS "familyName",
+      COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d."pledgeId" = pledges.id AND d.currency = pledges.currency), 0) AS paid`,
     totals: true,
-    enrich: (rows) => {
-      // What was paid towards these pledges in any currency other than their own. It cannot be
-      // subtracted without an exchange rate, so it travels beside the balance instead.
+    enrich: async (rows) => {
       const ids = rows.map((r) => String(r.id));
       if (ids.length === 0) return;
       const byPledge = new Map<string, Record<string, number>>();
-      const paidRows = db
+      const orgId = resolveOrgId();
+      const paidRows = (await db
         .prepare(
-          `SELECT d.pledgeId AS pledgeId, d.currency AS currency, SUM(d.amount) AS total
-           FROM donations d JOIN pledges p ON p.id = d.pledgeId
-           WHERE d.pledgeId IN (${ids.map(() => '?').join(', ')}) AND d.currency != p.currency
-           GROUP BY d.pledgeId, d.currency`,
+          `SELECT d."pledgeId" AS "pledgeId", d.currency AS currency, SUM(d.amount) AS total
+           FROM donations d JOIN pledges p ON p.id = d."pledgeId" AND p."orgId" = d."orgId"
+           WHERE d."orgId" = ? AND d."pledgeId" IN (${ids.map(() => '?').join(', ')}) AND d.currency != p.currency
+           GROUP BY d."pledgeId", d.currency`,
         )
-        .all(...ids) as Array<{ pledgeId: string; currency: string; total: number }>;
+        .all(orgId, ...ids)) as Array<{ pledgeId: string; currency: string; total: number }>;
       for (const r of paidRows) {
         const found = byPledge.get(r.pledgeId) ?? {};
         found[r.currency] = r.total;
@@ -124,9 +116,9 @@ const SPECS = {
       method: 'method = ?',
       currency: 'currency = ?',
     },
-    extra: `, ${familyName('donations')} AS familyName,
-      (SELECT p.fund FROM pledges p WHERE p.id = donations.pledgeId) AS pledgeFund,
-      (SELECT p.year FROM pledges p WHERE p.id = donations.pledgeId) AS pledgeYear`,
+    extra: `, ${familyName('donations')} AS "familyName",
+      (SELECT p.fund FROM pledges p WHERE p.id = donations."pledgeId") AS "pledgeFund",
+      (SELECT p.year FROM pledges p WHERE p.id = donations."pledgeId") AS "pledgeYear"`,
     totals: true,
     map: (r) => clean(r) as Donation & { familyName: string; pledgeFund?: string; pledgeYear?: number },
   },
@@ -143,16 +135,22 @@ const querySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
-/** One page of a list. Unknown sort keys fall back to the default; unknown filters are ignored. */
-export function page(list: PagedList, query: Record<string, unknown>): Page<unknown> {
+export async function page(list: PagedList, query: Record<string, unknown>): Promise<Page<unknown>> {
   const spec: PageSpec = SPECS[list];
   const { q, sort, order, limit, offset } = querySchema.parse(query);
-  const where: string[] = [];
-  const params: Array<string | number> = [];
+  const where: string[] = [`${quoteIdent('orgId')} = ?`];
+  const params: Array<string | number> = [resolveOrgId()];
 
   for (const word of (q ?? '').trim().split(/\s+/).filter(Boolean).slice(0, 8)) {
     const like = `%${word.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-    where.push(`(${spec.search.map((col) => `${col} LIKE ? ESCAPE '\\'`).join(' OR ')})`);
+    where.push(
+      `(${spec.search
+        .map((col) => {
+          const expr = col.includes('(') ? col : quoteIdent(col);
+          return `${expr} ILIKE ? ESCAPE '\\'`;
+        })
+        .join(' OR ')})`,
+    );
     params.push(...spec.search.map(() => like));
   }
   for (const [name, condition] of Object.entries(spec.filters)) {
@@ -165,25 +163,27 @@ export function page(list: PagedList, query: Record<string, unknown>): Page<unkn
 
   const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
   const sortKey = sort && sort in spec.sort ? sort : spec.defaultSort;
-  // Dates and years read best newest first; names A→Z.
   const defaultDir = ['date', 'year', 'created', 'amount'].includes(sortKey) ? 'DESC' : 'ASC';
   const dir = order ? order.toUpperCase() : defaultDir;
-  const orderSql = spec.sort[sortKey]
+  const orderSql = rewriteSortClause(spec.sort[sortKey])
     .split(',')
     .map((part) => `${part.trim()} ${dir}`)
     .join(', ');
 
-  const total = (db.prepare(`SELECT COUNT(*) AS n FROM ${spec.table} ${whereSql}`).get(...params) as { n: number }).n;
-  const rows = db
-    .prepare(`SELECT ${spec.table}.*${spec.extra ?? ''} FROM ${spec.table} ${whereSql} ORDER BY ${orderSql}, ${spec.then} LIMIT ? OFFSET ?`)
-    .all(...params, limit, offset) as Row[];
+  const table = quoteIdent(spec.table);
+  const total = ((await db.prepare(`SELECT COUNT(*) AS n FROM ${table} ${whereSql}`).get(...params)) as { n: number }).n;
+  const rows = (await db
+    .prepare(
+      `SELECT ${table}.*${spec.extra ?? ''} FROM ${table} ${whereSql} ORDER BY ${orderSql}, ${rewriteSortClause(spec.then)} LIMIT ? OFFSET ?`,
+    )
+    .all(...params, limit, offset)) as Row[];
 
-  spec.enrich?.(rows);
+  if (spec.enrich) await spec.enrich(rows);
   const result: Page<unknown> = { items: rows.map(spec.map), total, limit, offset };
   if (spec.totals) {
-    const sums = db
-      .prepare(`SELECT currency, SUM(amount) AS total FROM ${spec.table} ${whereSql} GROUP BY currency`)
-      .all(...params) as Array<{ currency: string; total: number }>;
+    const sums = (await db
+      .prepare(`SELECT currency, SUM(amount) AS total FROM ${table} ${whereSql} GROUP BY currency`)
+      .all(...params)) as Array<{ currency: string; total: number }>;
     result.totals = Object.fromEntries(sums.map((s) => [s.currency, s.total]));
   }
   return result;

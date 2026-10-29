@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -10,8 +10,12 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   FormControlLabel,
+  FormLabel,
   IconButton,
+  MenuItem,
+  Select,
   Stack,
   Switch,
   Table,
@@ -33,14 +37,18 @@ import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   sponsorshipInputSchema,
+  staffClaimInputSchema,
   todayISO,
   type SponsorshipInput,
   type SponsorshipSummary,
+  type StaffClaimInput,
 } from '@shulcrm/shared';
 import {
   createSponsorship,
   deleteSponsorship,
+  listFamilies,
   listSponsorships,
+  registerSponsorshipClaim,
   releaseClaim,
   updateSponsorship,
 } from '@/features/core/service';
@@ -208,6 +216,134 @@ function SponsorshipFormDialog({
   );
 }
 
+function RegisterFamilyDialog({
+  sponsorship,
+  open,
+  onClose,
+}: {
+  sponsorship: SponsorshipSummary;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const { t, money } = useSettings();
+  const { data: families } = useQuery({
+    queryKey: ['families'],
+    queryFn: listFamilies,
+    enabled: open,
+  });
+  const familyOptions = useMemo(() => families ?? [], [families]);
+  const { control, register, handleSubmit, reset, formState } = useForm<StaffClaimInput>({
+    resolver: zodResolver(staffClaimInputSchema),
+    defaultValues: { familyId: '', dedication: '', amount: undefined },
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    reset({
+      familyId: familyOptions[0]?.id ?? '',
+      dedication: '',
+      amount: sponsorship.suggestedAmount,
+    });
+  }, [open, familyOptions, reset, sponsorship.suggestedAmount]);
+
+  const save = useMutation({
+    mutationFn: (input: StaffClaimInput) => registerSponsorshipClaim(sponsorship.id, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['sponsorships'] });
+      void queryClient.invalidateQueries({ queryKey: ['pledges'] });
+      onClose();
+    },
+  });
+
+  const onSubmit = handleSubmit((v) =>
+    save.mutate({
+      familyId: v.familyId,
+      dedication: v.dedication?.trim() || undefined,
+      amount: v.amount,
+    }),
+  );
+  const e = formState.errors;
+  const canRegister = sponsorship.open && sponsorship.remaining > 0;
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle>Register a {t('family').toLowerCase()}</DialogTitle>
+      <form onSubmit={onSubmit} noValidate>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <Typography variant="body2" color="text.secondary">
+              {sponsorship.title}
+              {sponsorship.suggestedAmount !== undefined &&
+                ` · suggested ${money(sponsorship.suggestedAmount, sponsorship.currency)}`}
+            </Typography>
+            {!canRegister && (
+              <Alert severity="warning">
+                {sponsorship.open
+                  ? 'Every place on this date is already taken.'
+                  : 'This sponsorship is closed to new registrations.'}
+              </Alert>
+            )}
+            <FormControl error={Boolean(e.familyId)} disabled={!canRegister}>
+              <FormLabel>{t('family')}</FormLabel>
+              <Controller
+                name="familyId"
+                control={control}
+                render={({ field }) => (
+                  <Select {...field} value={field.value ?? ''}>
+                    {familyOptions.map((f) => (
+                      <MenuItem key={f.id} value={f.id}>
+                        {f.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                )}
+              />
+              {e.familyId?.message && (
+                <Typography variant="caption" color="error">
+                  {e.familyId.message}
+                </Typography>
+              )}
+            </FormControl>
+            <TextField
+              label="Dedication"
+              multiline
+              minRows={2}
+              disabled={!canRegister}
+              error={Boolean(e.dedication)}
+              helperText={e.dedication?.message}
+              {...register('dedication')}
+            />
+            <TextField
+              label="Amount"
+              type="number"
+              inputProps={{ min: 0, step: 'any' }}
+              disabled={!canRegister}
+              error={Boolean(e.amount)}
+              helperText={
+                e.amount?.message ??
+                (sponsorship.suggestedAmount !== undefined
+                  ? 'Leave as suggested or change it'
+                  : 'Leave empty if the amount is still to be agreed')
+              }
+              {...register('amount', { setValueAs: toNumberOrUndefined })}
+            />
+            {save.isError && <Alert severity="error">{(save.error as Error).message}</Alert>}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button variant="text" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={save.isPending || !canRegister}>
+            Register
+          </Button>
+        </DialogActions>
+      </form>
+    </Dialog>
+  );
+}
+
 /** Mounted per sponsorship (keyed by id), so one row's release error never greets the next. */
 function SponsorshipDetailDialog({
   sponsorship,
@@ -220,6 +356,7 @@ function SponsorshipDetailDialog({
   const { t, money, label } = useSettings();
   const longDate = useLongDate();
   const [pendingRelease, setPendingRelease] = useState<Claim | null>(null);
+  const [registerOpen, setRegisterOpen] = useState(false);
 
   const release = useMutation({
     mutationFn: (claimId: string) => releaseClaim(claimId),
@@ -318,10 +455,20 @@ function SponsorshipDetailDialog({
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}>
+        {sponsorship.open && sponsorship.remaining > 0 && (
+          <Button onClick={() => setRegisterOpen(true)} sx={{ mr: 'auto' }}>
+            Register {t('family').toLowerCase()}
+          </Button>
+        )}
         <Button variant="text" onClick={onClose}>
           Close
         </Button>
       </DialogActions>
+      <RegisterFamilyDialog
+        sponsorship={sponsorship}
+        open={registerOpen}
+        onClose={() => setRegisterOpen(false)}
+      />
       <ConfirmDialog
         open={pendingRelease !== null}
         title="Release this sponsorship"
@@ -368,6 +515,26 @@ export function SponsorshipsPage() {
   // Read the open row back out of the list, so a release shows up without a second request.
   const detail = (data ?? []).find((s) => s.id === detailId) ?? null;
 
+  const upcomingRegistrations = useMemo(() => {
+    if (when !== 'upcoming') return [];
+    type Row = Claim & { sponsorshipTitle: string; sponsorshipDate: string };
+    const rows: Row[] = [];
+    for (const s of shown) {
+      for (const c of s.claims) {
+        rows.push({
+          ...c,
+          sponsorshipTitle: s.title,
+          sponsorshipDate: s.date,
+        });
+      }
+    }
+    return rows.sort((a, b) =>
+      a.sponsorshipDate === b.sponsorshipDate
+        ? (a.familyName ?? '').localeCompare(b.familyName ?? '')
+        : a.sponsorshipDate.localeCompare(b.sponsorshipDate),
+    );
+  }, [shown, when]);
+
   return (
     <Box>
       <Stack
@@ -378,17 +545,55 @@ export function SponsorshipsPage() {
         sx={{ mb: 3 }}
       >
         <Box>
-          <Typography variant="h5">Sponsorships</Typography>
+          <Typography variant="h5">Kiddush registrations</Typography>
           <Typography variant="body2" color="text.secondary">
-            Kiddushim, seudos and anything else a {t('family').toLowerCase()} can sponsor. When a{' '}
-            {t('family').toLowerCase()} takes one on, the shul records a {t('pledge').toLowerCase()}{' '}
-            for the amount, so it appears alongside everything else they owe.
+            Manage kiddushim and other sponsorship dates. Families can register in the member portal;
+            the office can register them here too. Each registration creates a{' '}
+            {t('pledge').toLowerCase()} for the amount owed.
           </Typography>
         </Box>
         <Button startIcon={<AddIcon />} onClick={() => setForm({ open: true })}>
-          New sponsorship
+          New date
         </Button>
       </Stack>
+      {when === 'upcoming' && upcomingRegistrations.length > 0 && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Typography variant="subtitle1" sx={{ mb: 2 }}>
+              Upcoming registrations
+            </Typography>
+            <Box sx={{ overflowX: 'auto' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Date</TableCell>
+                    <TableCell>{t('family')}</TableCell>
+                    <TableCell>What</TableCell>
+                    <TableCell>Dedication</TableCell>
+                    <TableCell align="right">Amount</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {upcomingRegistrations.map((r) => (
+                    <TableRow
+                      key={r.id}
+                      hover
+                      sx={{ cursor: 'pointer' }}
+                      onClick={() => setDetailId(r.sponsorshipId)}
+                    >
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{longDate(r.sponsorshipDate)}</TableCell>
+                      <TableCell>{r.familyName ?? '—'}</TableCell>
+                      <TableCell>{r.sponsorshipTitle}</TableCell>
+                      <TableCell>{r.dedication ?? '—'}</TableCell>
+                      <TableCell align="right">{money(r.amount, r.currency)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardContent>
           <ToggleButtonGroup

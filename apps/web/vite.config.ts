@@ -6,6 +6,8 @@ import { dirname } from 'node:path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // GitHub Pages: set VITE_BASE_PATH=/shul_CRM/ (trailing slash). Default `/` for Docker/same-origin.
+  base: process.env.VITE_BASE_PATH || '/',
   plugins: [react()],
   resolve: {
     alias: {
