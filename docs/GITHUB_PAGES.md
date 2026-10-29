@@ -1,34 +1,39 @@
-# GitHub Pages UI + Tailscale API (mini PC)
+# GitHub Pages UI + API on the mini PC (Tailscale Funnel)
 
-Use a **stable public URL** for the React app on GitHub Pages, with the **API and database** staying on the mini PC over **Tailscale HTTPS**.
+Use **GitHub Pages** for the static React app and the **mini PC** for the API and database. Users open the Pages URL in a normal browser — **no Tailscale client on their device**.
 
 ```
-Browser  →  https://bennyg83.github.io/shul_CRM/     (static UI)
-         →  https://crm-mini-1.<tailnet>.ts.net/api/…  (session cookie, data)
+Browser  →  https://bennyg83.github.io/shul_CRM/              (UI from GitHub)
+         →  https://crm-mini-1.<tailnet>.ts.net/api/…         (API from your PC, via Funnel)
 ```
 
-Same-origin Docker deploy is still the default; this path is optional.
+GitHub does **not** proxy API traffic. The JavaScript downloaded from GitHub runs in the user’s browser and calls the API URL baked in at build time (`VITE_API_BASE_URL`). That API host must be reachable on the **public internet** (HTTPS). **Tailscale Serve** is tailnet-only; use **Tailscale Funnel** so anyone can reach the API while the machine stays on your tailnet for SSH/admin.
 
-## 1. Tailscale HTTPS on the mini PC
+Same-origin Docker on the mini PC is still the default install; this split layout is optional.
 
-On **crm-mini** (with Docker CRM on port 3000):
+## 1. Tailscale Funnel on the mini PC (public HTTPS API)
+
+On **crm-mini** (Docker CRM listening on port 3000):
 
 ```powershell
-# One-time: expose local CRM over HTTPS on your tailnet (MagicDNS name).
-tailscale serve --bg --https=443 http://127.0.0.1:3000
+# Public HTTPS → local CRM (requires Funnel allowed in Tailscale ACLs / admin console).
+tailscale funnel --bg --yes 3000
+tailscale funnel status
 ```
 
-Check:
+Check from a machine **without** Tailscale:
 
 ```powershell
 curl.exe -s https://crm-mini-1.<your-tailnet>.ts.net/api/health
 ```
 
-Note the hostname (Admin console → Machines → **crm-mini-1**). The API base for the web build is:
+The GitHub Pages build uses this as the API base (no trailing slash after `api`):
 
 `https://crm-mini-1.<tailnet>.ts.net/api`
 
-**Tailnet only:** users must be signed into Tailscale to reach that host. For a **public** API URL, use [Tailscale Funnel](https://tailscale.com/kb/1311/tailscale-funnel) instead of Serve (understand the security impact).
+To stop public exposure: `tailscale funnel reset` (or `--https=443 off`). For **tailnet-only** access again, use `tailscale serve` instead of Funnel.
+
+**Security:** Funnel puts login and API on the internet. Rely on strong passwords, HTTPS, CORS (`ALLOWED_ORIGINS`), and rate limits. Consider Tailscale [node approval](https://tailscale.com/kb/1099/acl) and monitoring.
 
 ## 2. API `.env` on the mini PC
 
@@ -82,7 +87,7 @@ npm run build -w @shulcrm/web
 |---------|-----|
 | Login succeeds then every request 401 | API not HTTPS, or `COOKIE_SAMESITE` / `COOKIE_SECURE` wrong |
 | CORS error in browser | `ALLOWED_ORIGINS` must be exactly `https://bennyg83.github.io` |
-| API unreachable from browser | Tailscale not connected, Serve not running, or Funnel not enabled for public users |
+| API unreachable from browser | Funnel not running, blocked by ACL, or Docker CRM down on the mini PC |
 | Blank page / 404 on refresh | Ensure workflow copies `index.html` → `404.html` (already in `pages.yml`) |
 | Logo missing | Public logo GET should work; if blocked, check Tailscale ACLs |
 
